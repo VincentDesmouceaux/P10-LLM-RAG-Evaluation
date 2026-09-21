@@ -47,9 +47,35 @@ TEST_CASES = [
             "Shai Gilgeous-Alexander est le joueur ayant marqué "
             "le plus de points, avec 2485 points."
         ),
-    )
+    ),
+    EvaluationCase(
+        category="complex",
+        question=(
+            "Parmi Miami Heat, Oklahoma City Thunder, "
+            "Los Angeles Clippers, Brooklyn Nets et Atlanta Hawks, "
+            "quelle équipe a marqué le plus de points, laquelle en a "
+            "marqué le moins, et quel est l'écart entre les deux ?"
+        ),
+        reference=(
+            "Oklahoma City Thunder a marqué le plus de points avec "
+            "9880 points. Brooklyn Nets en a marqué le moins avec "
+            "7999 points. L'écart est de 1881 points."
+        ),
+    ),
+    EvaluationCase(
+        category="noisy",
+        question=(
+            "J'ai vu plein de commentaires Reddit contradictoires hier "
+            "et tout le monde raconte quelque chose de différent... "
+            "bref, dans les stats de la saison, kel joueur a marker "
+            "le + de points ???"
+        ),
+        reference=(
+            "Shai Gilgeous-Alexander est le joueur ayant marqué "
+            "le plus de points, avec 2485 points."
+        ),
+    ),
 ]
-
 
 SYSTEM_PROMPT = """Tu es 'NBA Analyst AI', un assistant expert sur la ligue de basketball NBA.
 Ta mission est de répondre aux questions des fans en animant le débat.
