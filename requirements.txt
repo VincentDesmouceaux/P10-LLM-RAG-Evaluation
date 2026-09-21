@@ -11,5 +11,6 @@ requests==2.32.3
 streamlit-feedback==0.1.4
 pymupdf>=1.22.0
 pillow>=9.0.0
+ragas==0.3.9
 easyocr
 tqdm
