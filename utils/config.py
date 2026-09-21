@@ -13,7 +13,7 @@ if not MISTRAL_API_KEY:
     # raise ValueError("Clé API Mistral manquante. Veuillez la définir dans le fichier .env")
 
 # --- Modèles Mistral ---
-EMBEDDING_MODEL = "mistral-embed"
+EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 MODEL_NAME = "mistral-small-latest" # Ou un autre modèle comme mistral-large-latest
 
 # --- Configuration de l'Indexation ---
