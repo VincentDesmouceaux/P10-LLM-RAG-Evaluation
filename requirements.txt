@@ -22,3 +22,4 @@ logfire==5.1.0
 openai==1.109.1
 protobuf==5.29.6
 pytest==9.1.1
+matplotlib==3.11.2

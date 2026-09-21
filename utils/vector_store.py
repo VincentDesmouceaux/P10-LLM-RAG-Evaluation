@@ -1,5 +1,10 @@
 import logging
-from utils.schemas import RAGQuery, RetrievalResult
+from utils.schemas import (
+    EmbeddingBatch,
+    PreparedChunk,
+    RAGQuery,
+    RetrievalResult,
+)
 import os
 import pickle
 from typing import Any, Dict, List, Optional
@@ -152,10 +157,10 @@ class VectorStoreManager:
             )
 
             for chunk_index, chunk in enumerate(chunks):
-                chunk_dict = {
-                    "id": f"{doc_index}_{chunk_index}",
-                    "text": chunk.page_content,
-                    "metadata": {
+                validated_chunk = PreparedChunk(
+                    id=f"{doc_index}_{chunk_index}",
+                    text=chunk.page_content.strip(),
+                    metadata={
                         **chunk.metadata,
                         "chunk_id_in_doc": chunk_index,
                         "start_index": chunk.metadata.get(
@@ -163,9 +168,11 @@ class VectorStoreManager:
                             -1,
                         ),
                     },
-                }
+                )
 
-                all_chunks.append(chunk_dict)
+                all_chunks.append(
+                    validated_chunk.model_dump()
+                )
 
         logging.info(
             "Total de %s chunks créés.",
@@ -213,8 +220,29 @@ class VectorStoreManager:
                 dtype=np.float32,
             )
 
+            expected_dimension = (
+                self.embedding_model
+                .get_sentence_embedding_dimension()
+            )
+
+            validated_batch = EmbeddingBatch(
+                chunk_ids=[
+                    chunk["id"]
+                    for chunk in chunks
+                ],
+                vectors=embeddings_array.tolist(),
+                expected_dimension=int(
+                    expected_dimension
+                ),
+            )
+
+            embeddings_array = np.asarray(
+                validated_batch.vectors,
+                dtype=np.float32,
+            )
+
             logging.info(
-                "Embeddings générés avec succès. Shape : %s",
+                "Embeddings validés avec succès. Shape : %s",
                 embeddings_array.shape,
             )
 
