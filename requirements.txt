@@ -17,3 +17,8 @@ tqdm
 sentence-transformers==6.1.0
 langchain-mistralai==0.2.10
 langchain-ollama==0.2.3
+pydantic-ai-slim==2.46.0
+logfire==5.1.0
+openai==1.109.1
+protobuf==5.29.6
+pytest==9.1.1

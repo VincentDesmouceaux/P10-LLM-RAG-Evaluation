@@ -1,4 +1,5 @@
 import logging
+from utils.schemas import RAGQuery, RetrievalResult
 import os
 import pickle
 from typing import Any, Dict, List, Optional
@@ -377,6 +378,13 @@ class VectorStoreManager:
                 Similarité minimale entre 0 et 1.
         """
 
+        validated_query = RAGQuery(
+            question=query_text,
+        )
+
+        query_text = validated_query.question
+
+
         if (
             self.index is None
             or not self.document_chunks
@@ -451,13 +459,15 @@ class VectorStoreManager:
                     chunk_index
                 ]
 
+                validated_result = RetrievalResult(
+                    score=raw_score * 100,
+                    raw_score=raw_score,
+                    text=chunk["text"],
+                    metadata=chunk["metadata"],
+                )
+
                 results.append(
-                    {
-                        "score": raw_score * 100,
-                        "raw_score": raw_score,
-                        "text": chunk["text"],
-                        "metadata": chunk["metadata"],
-                    }
+                    validated_result.model_dump()
                 )
 
             results.sort(
