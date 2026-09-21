@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Literal
 
 from langchain_ollama import ChatOllama
@@ -266,66 +267,47 @@ def run_full_evaluation(
 
 
 def main() -> None:
-    """Lance l'évaluation du premier cas de test."""
-
-    test_case = TEST_CASES[0]
+    """Compare la qualité du retrieval sur tous les cas de test."""
 
     print()
     print("=" * 80)
-    print("EVALUATION RAG")
+    print("EVALUATION COMPARATIVE RAGAS - RETRIEVAL")
     print("=" * 80)
-
-    print(f"Catégorie : {test_case.category}")
-    print(f"Question   : {test_case.question}")
-    print(f"Référence  : {test_case.reference}")
 
     vector_store = VectorStoreManager()
-
-    search_results = retrieve_contexts(
-        test_case.question,
-        vector_store,
-    )
-
-    print()
-    print("=" * 80)
-    print("RETRIEVAL")
-    print("=" * 80)
-
-    print(
-        f"Contextes récupérés : {len(search_results)}"
-    )
-
-    for position, result in enumerate(
-        search_results,
-        start=1,
-    ):
-        source = result["metadata"].get(
-            "source",
-            "Inconnue",
-        )
-
-        print(
-            f"{position}. {source} "
-            f"| score={result['score']:.2f}%"
-        )
-
-    print()
-    print("=" * 80)
-    print("GENERATION")
-    print("=" * 80)
-
-    response = generate_response(
-        test_case.question,
-        search_results,
-    )
-
     judge = build_judge()
 
-    if response is None:
+    comparison_results = []
+
+    for test_case in TEST_CASES:
         print()
         print("=" * 80)
-        print("MODE RETRIEVAL-ONLY")
+        print(f"CAS : {test_case.category.upper()}")
         print("=" * 80)
+        print(f"Question  : {test_case.question}")
+        print(f"Référence : {test_case.reference}")
+
+        search_results = retrieve_contexts(
+            test_case.question,
+            vector_store,
+        )
+
+        print()
+        print(f"Contextes récupérés : {len(search_results)}")
+
+        for position, result in enumerate(
+            search_results,
+            start=1,
+        ):
+            source = result["metadata"].get(
+                "source",
+                "Inconnue",
+            )
+
+            print(
+                f"{position}. {source} "
+                f"| score={result['score']:.2f}%"
+            )
 
         dataset = build_dataset(
             test_case=test_case,
@@ -337,33 +319,89 @@ def main() -> None:
             judge=judge,
         )
 
-    else:
-        print()
-        print("Réponse Mistral :")
-        print(response)
+        result_df = result.to_pandas()
 
-        print()
-        print("=" * 80)
-        print("MODE FULL RAG")
-        print("=" * 80)
-
-        dataset = build_dataset(
-            test_case=test_case,
-            search_results=search_results,
-            response=response,
+        context_precision_score = float(
+            result_df.loc[0, "context_precision"]
         )
 
-        result = run_full_evaluation(
-            dataset=dataset,
-            judge=judge,
+        context_recall_score = float(
+            result_df.loc[0, "context_recall"]
+        )
+
+        comparison_results.append(
+            {
+                "category": test_case.category,
+                "context_precision": context_precision_score,
+                "context_recall": context_recall_score,
+            }
+        )
+
+        print()
+        print(
+            f"context_precision = "
+            f"{context_precision_score:.4f}"
+        )
+        print(
+            f"context_recall    = "
+            f"{context_recall_score:.4f}"
         )
 
     print()
     print("=" * 80)
-    print("RESULTATS RAGAS")
+    print("TABLEAU COMPARATIF")
     print("=" * 80)
 
-    print(result)
+    print(
+        f"{'category':<12}"
+        f"{'context_precision':>20}"
+        f"{'context_recall':>18}"
+    )
+
+    print("-" * 50)
+
+    for row in comparison_results:
+        print(
+            f"{row['category']:<12}"
+            f"{row['context_precision']:>20.4f}"
+            f"{row['context_recall']:>18.4f}"
+        )
+
+    output_dir = Path("evaluation_results")
+    output_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    output_file = (
+        output_dir
+        / "retrieval_comparison.csv"
+    )
+
+    import csv
+
+    with output_file.open(
+        "w",
+        encoding="utf-8",
+        newline="",
+    ) as csv_file:
+        writer = csv.DictWriter(
+            csv_file,
+            fieldnames=[
+                "category",
+                "context_precision",
+                "context_recall",
+            ],
+        )
+
+        writer.writeheader()
+        writer.writerows(comparison_results)
+
+    print()
+    print(
+        f"Résultats sauvegardés dans : "
+        f"{output_file}"
+    )
 
 
 if __name__ == "__main__":
