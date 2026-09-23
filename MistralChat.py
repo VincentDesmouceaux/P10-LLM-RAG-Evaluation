@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import streamlit as st
 
 from hybrid_agent import HybridNBAAgent
@@ -241,6 +243,41 @@ def display_hybrid_metadata(
                     )
 
 
+def display_plot(
+    result: dict,
+) -> None:
+    """
+    Affiche le graphique généré par PlotTool
+    lorsqu'un chemin PNG est disponible.
+    """
+    plot_path = result.get(
+        "plot_path"
+    )
+
+    if not plot_path:
+        return
+
+    path = Path(
+        plot_path
+    )
+
+    if not path.exists():
+        st.warning(
+            "Le graphique généré "
+            "n'est plus disponible."
+        )
+        return
+
+    st.image(
+        str(path),
+        caption=(
+            "Visualisation générée "
+            "par PlotTool"
+        ),
+        use_container_width=True,
+    )
+
+
 def display_metadata(
     result: dict,
 ) -> None:
@@ -248,6 +285,10 @@ def display_metadata(
     Affiche les métadonnées adaptées à la route
     sélectionnée par l'agent hybride.
     """
+    display_plot(
+        result
+    )
+
     route = result.get(
         "route",
         "unknown",
