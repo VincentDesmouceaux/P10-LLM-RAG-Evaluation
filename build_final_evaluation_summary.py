@@ -107,7 +107,7 @@ def main():
     sql_df = pd.DataFrame(
         [
             {
-                "evaluation": "SQL",
+                "evaluation": "Robustness",
                 "metric": "accuracy",
                 "before": sql_before,
                 "after": sql_after,
@@ -224,7 +224,7 @@ def main():
     plt.bar(
         [
             "RAG seul",
-            "RAG + SQL Tool",
+            "RAG + SQL + Hybrid",
         ],
         [
             sql_before * 100,
@@ -242,7 +242,7 @@ def main():
     )
 
     plt.title(
-        "Questions numériques avant / après"
+        "Benchmark de robustesse avant / après"
     )
 
     for index, value in enumerate(
@@ -284,7 +284,7 @@ def main():
     )
 
     print(
-        "SQL figure   :",
+        "Robustness figure :",
         sql_figure,
     )
 

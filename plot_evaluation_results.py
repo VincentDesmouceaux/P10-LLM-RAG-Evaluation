@@ -43,7 +43,7 @@ def main():
     plt.bar(
         [
             "RAG seul",
-            "RAG + SQL Tool",
+            "RAG + SQL + Hybrid",
         ],
         [
             before_score,
@@ -133,7 +133,7 @@ def main():
             "after_correct"
         ],
         width=width,
-        label="RAG + SQL Tool",
+        label="RAG + SQL + Hybrid",
     )
 
     plt.xticks(
@@ -189,7 +189,7 @@ def main():
     )
 
     print(
-        f"RAG + SQL Tool : "
+        f"RAG + SQL + Hybrid : "
         f"{after_score:.1f}%"
     )
 

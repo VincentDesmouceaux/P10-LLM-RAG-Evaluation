@@ -1,191 +1,521 @@
-# MistralChat.py (version RAG)
 import streamlit as st
-import os
-import logging
-from mistralai.client import MistralClient
-from mistralai.models.chat_completion import ChatMessage
-from dotenv import load_dotenv
 
-# --- Importations depuis vos modules ---
-try:
-    from utils.config import (
-        MISTRAL_API_KEY, MODEL_NAME, SEARCH_K,
-        APP_TITLE, NAME
-    )
-    from utils.vector_store import VectorStoreManager
-except ImportError as e:
-    st.error(f"Erreur d'importation: {e}. Vérifiez la structure de vos dossiers et les fichiers dans 'utils'.")
-    st.stop()
+from hybrid_agent import HybridNBAAgent
 
 
-# --- Configuration du Logging ---
-# Note: Streamlit peut avoir sa propre gestion de logs. Configurer ici est une bonne pratique.
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(module)s - %(message)s')
-
-# --- Configuration de l'API Mistral ---
-api_key = MISTRAL_API_KEY
-model = MODEL_NAME
-
-if not api_key:
-    st.error("Erreur : Clé API Mistral non trouvée (MISTRAL_API_KEY). Veuillez la définir dans le fichier .env.")
-    st.stop()
-
-try:
-    client = MistralClient(api_key=api_key)
-    logging.info("Client Mistral initialisé.")
-except Exception as e:
-    st.error(f"Erreur lors de l'initialisation du client Mistral : {e}")
-    logging.exception("Erreur initialisation client Mistral")
-    st.stop()
-
-# --- Chargement du Vector Store (mis en cache) ---
-@st.cache_resource # Garde le manager chargé en mémoire pour la session
-def get_vector_store_manager():
-    logging.info("Tentative de chargement du VectorStoreManager...")
-    try:
-        manager = VectorStoreManager()
-        # Vérifie si l'index a bien été chargé par le constructeur
-        if manager.index is None or not manager.document_chunks:
-            st.error("L'index vectoriel ou les chunks n'ont pas pu être chargés.")
-            st.warning("Assurez-vous d'avoir exécuté 'python indexer.py' après avoir placé vos fichiers dans le dossier 'inputs'.")
-            logging.error("Index Faiss ou chunks non trouvés/chargés par VectorStoreManager.")
-            return None # Retourne None si échec
-        logging.info(f"VectorStoreManager chargé avec succès ({manager.index.ntotal} vecteurs).")
-        return manager
-    except FileNotFoundError:
-         st.error("Fichiers d'index ou de chunks non trouvés.")
-         st.warning("Veuillez exécuter 'python indexer.py' pour créer la base de connaissances.")
-         logging.error("FileNotFoundError lors de l'init de VectorStoreManager.")
-         return None
-    except Exception as e:
-        st.error(f"Erreur inattendue lors du chargement du VectorStoreManager: {e}")
-        logging.exception("Erreur chargement VectorStoreManager")
-        return None
-
-vector_store_manager = get_vector_store_manager()
-
-# --- Prompt Système pour RAG ---
-# Adaptez ce prompt selon vos besoins
-SYSTEM_PROMPT = f"""Tu es 'NBA Analyst AI', un assistant expert sur la ligue de basketball NBA.
-Ta mission est de répondre aux questions des fans en animant le débat.
-
----
-{{context_str}}
----
-
-QUESTION DU FAN:
-{{question}}
-
-RÉPONSE DE L'ANALYSTE NBA:"""
+st.set_page_config(
+    page_title="NBA Hybrid AI",
+    page_icon="🏀",
+    layout="wide",
+)
 
 
-# --- Initialisation de l'historique de conversation ---
-if "messages" not in st.session_state:
-    # Message d'accueil initial
-    st.session_state.messages = [{"role": "assistant", "content": f"Bonjour ! Je suis votre analyste IA pour la {NAME}. Posez-moi vos questions sur les équipes, les joueurs ou les statistiques, et je vous répondrai en me basant sur les données les plus récentes."}]
-
-# --- Fonctions ---
-
-def generer_reponse(prompt_messages: list[ChatMessage]) -> str:
+def initial_messages() -> list[dict]:
     """
-    Envoie le prompt (qui inclut maintenant le contexte) à l'API Mistral.
+    Retourne l'historique initial de la conversation.
     """
-    if not prompt_messages:
-         logging.warning("Tentative de génération de réponse avec un prompt vide.")
-         return "Je ne peux pas traiter une demande vide."
-    try:
-        logging.info(f"Appel à l'API Mistral modèle '{model}' avec {len(prompt_messages)} message(s).")
-        # Log le contenu du prompt (peut être long) - commenter si trop verbeux
-        # logging.debug(f"Prompt envoyé à l'API: {prompt_messages}")
-
-        response = client.chat(
-            model=model,
-            messages=prompt_messages,
-            temperature=0.1, # Température basse pour des réponses factuelles basées sur le contexte
-            # top_p=0.9,
-        )
-        if response.choices and len(response.choices) > 0:
-            logging.info("Réponse reçue de l'API Mistral.")
-            return response.choices[0].message.content
-        else:
-            logging.warning("L'API n'a pas retourné de choix valide.")
-            return "Désolé, je n'ai pas pu générer de réponse valide pour le moment."
-    except Exception as e:
-        st.error(f"Erreur lors de l'appel à l'API Mistral: {e}")
-        logging.exception("Erreur API Mistral pendant client.chat")
-        return "Je suis désolé, une erreur technique m'empêche de répondre. Veuillez réessayer plus tard."
-
-# --- Interface Utilisateur Streamlit ---
-st.title(APP_TITLE)
-st.caption(f"Assistant virtuel pour {NAME} | Modèle: {model}")
-
-# Affichage des messages de l'historique (pour l'UI)
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.write(message["content"])
-
-# Zone de saisie utilisateur
-if prompt := st.chat_input(f"Posez votre question sur la {NAME}..."):
-    # 1. Ajouter et afficher le message de l'utilisateur
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.write(prompt)
-
-    # === Début de la logique RAG ===
-
-    # 2. Vérifier si le Vector Store est disponible
-    if vector_store_manager is None:
-        st.error("Le service de recherche de connaissances n'est pas disponible. Impossible de traiter votre demande.")
-        logging.error("VectorStoreManager non disponible pour la recherche.")
-        # On arrête ici car on ne peut pas faire de RAG
-        st.stop()
-
-    # 3. Rechercher le contexte dans le Vector Store
-    try:
-        logging.info(f"Recherche de contexte pour la question: '{prompt}' avec k={SEARCH_K}")
-        search_results = vector_store_manager.search(prompt, k=SEARCH_K)
-        logging.info(f"{len(search_results)} chunks trouvés dans le Vector Store.")
-    except Exception as e:
-        st.error(f"Une erreur est survenue lors de la recherche d'informations pertinentes: {e}")
-        logging.exception(f"Erreur pendant vector_store_manager.search pour la query: {prompt}")
-        search_results = [] # On continue sans contexte si la recherche échoue
-
-    # 4. Formater le contexte pour le prompt LLM
-    context_str = "\n\n---\n\n".join([
-        f"Source: {res['metadata'].get('source', 'Inconnue')} (Score: {res['score']:.1f}%)\nContenu: {res['text']}"
-        for res in search_results
-    ])
-
-    if not search_results:
-        context_str = "Aucune information pertinente trouvée dans la base de connaissances pour cette question."
-        logging.warning(f"Aucun contexte trouvé pour la query: {prompt}")
-
-    # 5. Construire le prompt final pour l'API Mistral en utilisant le System Prompt RAG
-    final_prompt_for_llm = SYSTEM_PROMPT.format(context_str=context_str, question=prompt)
-
-    # Créer la liste de messages pour l'API (juste le prompt système/utilisateur combiné)
-    messages_for_api = [
-        # On pourrait séparer system et user, mais Mistral gère bien un long message user structuré
-        ChatMessage(role="user", content=final_prompt_for_llm)
+    return [
+        {
+            "role": "assistant",
+            "content": (
+                "Bonjour. Je suis l'assistant NBA hybride de SportSee. "
+                "Je peux analyser les discussions Reddit avec le RAG, "
+                "interroger les statistiques structurées avec SQL "
+                "ou combiner les deux sources."
+            ),
+            "metadata": None,
+        }
     ]
 
-    # === Fin de la logique RAG ===
+
+@st.cache_resource
+def get_agent() -> HybridNBAAgent:
+    """
+    Initialise une seule instance de HybridNBAAgent.
+
+    Streamlit conserve cette instance entre les reruns afin
+    d'éviter de recharger FAISS et les modèles à chaque question.
+    """
+    return HybridNBAAgent()
 
 
-    # 6. Afficher indicateur + Générer la réponse de l'assistant via LLM
-    with st.chat_message("assistant"):
-        message_placeholder = st.empty()
-        message_placeholder.text("...") # Indicateur simple
+def display_sql_metadata(
+    result: dict,
+) -> None:
+    """
+    Affiche les informations techniques associées
+    à une réponse SQL.
+    """
+    st.caption(
+        "Route utilisée : SQL"
+    )
 
-        # Génération de la réponse de l'assistant en utilisant le prompt augmenté
-        response_content = generer_reponse(messages_for_api)
+    sql = result.get("sql")
+    data = result.get("data")
+    sources = result.get(
+        "sources",
+        [],
+    )
 
-        # Affichage de la réponse complète
-        message_placeholder.write(response_content)
+    if sql:
+        with st.expander(
+            "Voir la requête SQL"
+        ):
+            st.code(
+                sql,
+                language="sql",
+            )
 
-    # 7. Ajouter la réponse de l'assistant à l'historique (pour affichage UI)
-    st.session_state.messages.append({"role": "assistant", "content": response_content})
+    if data is not None:
+        with st.expander(
+            "Voir les données SQL"
+        ):
+            st.json(data)
 
-# Petit pied de page optionnel
-st.markdown("---")
-st.caption("Powered by Mistral AI & Faiss | Data-driven NBA Insights")
+    if sources:
+        with st.expander(
+            "Voir les sources"
+        ):
+            for source in sources:
+                st.write(
+                    f"- {source}"
+                )
+
+
+def display_rag_metadata(
+    result: dict,
+) -> None:
+    """
+    Affiche les sources et scores de retrieval
+    associés à une réponse RAG.
+    """
+    st.caption(
+        "Route utilisée : RAG"
+    )
+
+    sources = result.get(
+        "sources",
+        [],
+    )
+
+    retrieval = result.get(
+        "retrieval",
+        [],
+    )
+
+    if sources:
+        with st.expander(
+            "Voir les sources"
+        ):
+            for source in sources:
+                st.write(
+                    f"- {source}"
+                )
+
+    if retrieval:
+        with st.expander(
+            "Voir le retrieval"
+        ):
+            for item in retrieval:
+                source = item.get(
+                    "source",
+                    "source inconnue",
+                )
+
+                score = item.get(
+                    "score"
+                )
+
+                if score is None:
+                    st.write(
+                        f"- {source}"
+                    )
+                else:
+                    st.write(
+                        f"- {source} "
+                        f"— score : {score:.2f}%"
+                    )
+
+
+def display_hybrid_metadata(
+    result: dict,
+) -> None:
+    """
+    Affiche les informations techniques d'une réponse
+    combinant SQL et RAG.
+    """
+    st.caption(
+        "Route utilisée : HYBRID — SQL + RAG"
+    )
+
+    sql_question = result.get(
+        "sql_question"
+    )
+
+    rag_question = result.get(
+        "rag_question"
+    )
+
+    sql = result.get("sql")
+    data = result.get("data")
+
+    sources = result.get(
+        "sources",
+        [],
+    )
+
+    retrieval = result.get(
+        "retrieval",
+        [],
+    )
+
+    if (
+        sql_question
+        or rag_question
+    ):
+        with st.expander(
+            "Voir la décomposition de la question"
+        ):
+            if sql_question:
+                st.markdown(
+                    "**Sous-question SQL**"
+                )
+                st.write(
+                    sql_question
+                )
+
+            if rag_question:
+                st.markdown(
+                    "**Sous-question RAG**"
+                )
+                st.write(
+                    rag_question
+                )
+
+    if sql:
+        with st.expander(
+            "Voir la requête SQL"
+        ):
+            st.code(
+                sql,
+                language="sql",
+            )
+
+    if data is not None:
+        with st.expander(
+            "Voir les données SQL"
+        ):
+            st.json(data)
+
+    if sources:
+        with st.expander(
+            "Voir les sources"
+        ):
+            for source in sources:
+                st.write(
+                    f"- {source}"
+                )
+
+    if retrieval:
+        with st.expander(
+            "Voir le retrieval RAG"
+        ):
+            for item in retrieval:
+                source = item.get(
+                    "source",
+                    "source inconnue",
+                )
+
+                score = item.get(
+                    "score"
+                )
+
+                if score is None:
+                    st.write(
+                        f"- {source}"
+                    )
+                else:
+                    st.write(
+                        f"- {source} "
+                        f"— score : {score:.2f}%"
+                    )
+
+
+def display_metadata(
+    result: dict,
+) -> None:
+    """
+    Affiche les métadonnées adaptées à la route
+    sélectionnée par l'agent hybride.
+    """
+    route = result.get(
+        "route",
+        "unknown",
+    ).lower()
+
+    if route == "sql":
+        display_sql_metadata(
+            result
+        )
+        return
+
+    if route == "rag":
+        display_rag_metadata(
+            result
+        )
+        return
+
+    if route == "hybrid":
+        display_hybrid_metadata(
+            result
+        )
+        return
+
+    if route == "error":
+        st.caption(
+            "Route utilisée : ERROR"
+        )
+        return
+
+    st.caption(
+        f"Route utilisée : "
+        f"{route.upper()}"
+    )
+
+
+st.title(
+    "🏀 NBA Hybrid AI"
+)
+
+st.caption(
+    "Assistant SportSee — "
+    "RAG documentaire + SQL analytique + "
+    "routage hybride"
+)
+
+
+with st.sidebar:
+    st.header(
+        "Architecture"
+    )
+
+    st.markdown(
+        """
+### Questions textuelles
+
+**FAISS → RAG → LLM**
+
+Utilisé pour :
+
+- commentaires Reddit ;
+- opinions de fans ;
+- analyses textuelles ;
+- contenu documentaire.
+
+### Questions numériques
+
+**LangChain SQL Tool → SQLite → LLM**
+
+Utilisé pour :
+
+- points ;
+- rebonds ;
+- moyennes ;
+- classements ;
+- comparaisons ;
+- agrégations.
+
+### Questions mixtes
+
+**SQL + RAG → LLM**
+
+Utilisé lorsqu'une question nécessite à la fois :
+
+- une donnée statistique ;
+- une analyse documentaire ;
+- des commentaires ou opinions Reddit.
+
+### Modèle local
+
+`Ollama / qwen2.5:7b-instruct`
+
+### Validation
+
+`Pydantic + Pydantic AI`
+"""
+    )
+
+    st.divider()
+
+    st.subheader(
+        "Questions de démonstration"
+    )
+
+    st.markdown(
+        """
+**SQL**
+
+`Quel joueur a marqué le plus de points ?`
+
+`Quelle équipe totalise le plus de points ?`
+
+`Parmi MIA, OKC, LAC, BKN et ATL, quelle équipe a marqué le plus de points ?`
+
+**RAG**
+
+`Que disent les discussions Reddit sur Reggie Miller ?`
+
+`Hali est-il décrit comme très vocal avec ses coéquipiers ?`
+
+**HYBRID**
+
+`Quel joueur a marqué le plus de points et que disent les discussions Reddit à son sujet ?`
+"""
+    )
+
+    st.divider()
+
+    if st.button(
+        "Effacer la conversation",
+        use_container_width=True,
+    ):
+        st.session_state.messages = (
+            initial_messages()
+        )
+
+        st.rerun()
+
+
+if "messages" not in st.session_state:
+    st.session_state.messages = (
+        initial_messages()
+    )
+
+
+try:
+    agent = get_agent()
+
+except Exception as exc:
+    st.error(
+        "Impossible d'initialiser "
+        "l'agent hybride."
+    )
+
+    st.exception(exc)
+
+    st.stop()
+
+
+for message in st.session_state.messages:
+    with st.chat_message(
+        message["role"]
+    ):
+        st.markdown(
+            message["content"]
+        )
+
+        metadata = message.get(
+            "metadata"
+        )
+
+        if (
+            message["role"] == "assistant"
+            and metadata
+        ):
+            display_metadata(
+                metadata
+            )
+
+
+question = st.chat_input(
+    "Posez une question sur la NBA..."
+)
+
+
+if question:
+    user_message = {
+        "role": "user",
+        "content": question,
+        "metadata": None,
+    }
+
+    st.session_state.messages.append(
+        user_message
+    )
+
+    with st.chat_message(
+        "user"
+    ):
+        st.markdown(
+            question
+        )
+
+    with st.chat_message(
+        "assistant"
+    ):
+        with st.spinner(
+            "Analyse de la question..."
+        ):
+            try:
+                result = agent.ask(
+                    question
+                )
+
+                answer = result.get(
+                    "answer",
+                    (
+                        "Aucune réponse "
+                        "n'a été générée."
+                    ),
+                )
+
+                st.markdown(
+                    answer
+                )
+
+                display_metadata(
+                    result
+                )
+
+            except Exception as exc:
+                answer = (
+                    "Une erreur est survenue "
+                    "pendant le traitement "
+                    "de la question."
+                )
+
+                result = {
+                    "route": "error",
+                    "error": str(exc),
+                }
+
+                st.error(
+                    answer
+                )
+
+                with st.expander(
+                    "Voir le détail de l'erreur"
+                ):
+                    st.exception(
+                        exc
+                    )
+
+    assistant_message = {
+        "role": "assistant",
+        "content": answer,
+        "metadata": result,
+    }
+
+    st.session_state.messages.append(
+        assistant_message
+    )
+
+
+st.divider()
+
+st.caption(
+    "P10 OpenClassrooms — "
+    "RAG + SQL Tool + Hybrid Routing + "
+    "FAISS + SQLite + Ollama + "
+    "Pydantic AI + RAGAS"
+)

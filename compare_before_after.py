@@ -24,6 +24,7 @@ TEST_CASES = [
             "Shai",
             "2485",
         ],
+        "expected_route": "sql",
     },
     {
         "category": "team_numeric",
@@ -34,6 +35,7 @@ TEST_CASES = [
         "expected_terms": [
             "18",
         ],
+        "expected_route": "sql",
     },
     {
         "category": "team_numeric",
@@ -43,7 +45,9 @@ TEST_CASES = [
         ),
         "expected_terms": [
             "Detroit",
+            "10292",
         ],
+        "expected_route": "sql",
     },
     {
         "category": "complex_numeric",
@@ -61,6 +65,7 @@ TEST_CASES = [
             "7999",
             "1881",
         ],
+        "expected_route": "sql",
     },
     {
         "category": "noisy_numeric",
@@ -74,6 +79,24 @@ TEST_CASES = [
             "Shai",
             "2485",
         ],
+        "expected_route": "sql",
+    },
+    {
+        "category": "mixed_text_numeric",
+        "question": (
+            "Quel joueur a marqué le plus "
+            "de points et que disent les "
+            "discussions Reddit à son sujet ?"
+        ),
+        "expected_terms": [
+            "Shai",
+            "2485",
+        ],
+        "expected_route": "hybrid",
+        "expected_source_fragments": [
+            "SQLite NBA",
+            "Reddit",
+        ],
     },
 ]
 
@@ -82,6 +105,10 @@ def contains_terms(
     answer: str,
     terms: list[str],
 ) -> bool:
+    """
+    Vérifie que tous les termes attendus
+    apparaissent dans la réponse.
+    """
     normalized = answer.lower()
 
     return all(
@@ -90,10 +117,39 @@ def contains_terms(
     )
 
 
+def contains_source_fragments(
+    sources: list[str],
+    expected_fragments: list[str],
+) -> bool:
+    """
+    Vérifie que les sources contiennent
+    les fragments attendus.
+
+    Exemple :
+    "Reddit" correspond à "Reddit 1.pdf".
+    """
+    normalized_sources = [
+        str(source).lower()
+        for source in sources
+    ]
+
+    return all(
+        any(
+            fragment.lower() in source
+            for source in normalized_sources
+        )
+        for fragment in expected_fragments
+    )
+
+
 def baseline_rag_answer(
     vector_store,
-    question,
-):
+    question: str,
+) -> str:
+    """
+    Produit la réponse du système initial :
+    RAG documentaire uniquement.
+    """
     results = vector_store.search(
         question,
         k=5,
@@ -110,6 +166,7 @@ def baseline_rag_answer(
         source = (
             metadata.get("filename")
             or metadata.get("source")
+            or metadata.get("file_name")
             or "source inconnue"
         )
 
@@ -133,7 +190,7 @@ def baseline_rag_answer(
     return structured.answer
 
 
-def main():
+def main() -> None:
     OUTPUT_PATH.parent.mkdir(
         parents=True,
         exist_ok=True,
@@ -146,7 +203,21 @@ def main():
 
     for case in TEST_CASES:
         question = case["question"]
-        expected = case["expected_terms"]
+
+        expected_terms = case[
+            "expected_terms"
+        ]
+
+        expected_route = case.get(
+            "expected_route"
+        )
+
+        expected_source_fragments = (
+            case.get(
+                "expected_source_fragments",
+                [],
+            )
+        )
 
         print()
         print("=" * 100)
@@ -163,35 +234,87 @@ def main():
             question
         )
 
-        after_answer = (
-            after_result["answer"]
+        after_answer = after_result.get(
+            "answer",
+            "",
         )
 
-        before_ok = contains_terms(
+        after_route = after_result.get(
+            "route",
+            "unknown",
+        )
+
+        after_sources = after_result.get(
+            "sources",
+            [],
+        )
+
+        before_terms_ok = contains_terms(
             before_answer,
-            expected,
+            expected_terms,
         )
 
-        after_ok = contains_terms(
+        after_terms_ok = contains_terms(
             after_answer,
-            expected,
+            expected_terms,
+        )
+
+        route_ok = (
+            expected_route is None
+            or after_route == expected_route
+        )
+
+        sources_ok = (
+            not expected_source_fragments
+            or contains_source_fragments(
+                after_sources,
+                expected_source_fragments,
+            )
+        )
+
+        before_ok = before_terms_ok
+
+        after_ok = (
+            after_terms_ok
+            and route_ok
+            and sources_ok
         )
 
         print(
             "AVANT :",
             "OK" if before_ok else "ECHEC",
         )
+
         print(before_answer)
 
         print()
+
         print(
             "APRES :",
             "OK" if after_ok else "ECHEC",
         )
+
         print(
             "ROUTE :",
-            after_result["route"],
+            after_route,
         )
+
+        print(
+            "ROUTE ATTENDUE :",
+            expected_route,
+        )
+
+        print(
+            "ROUTE CORRECTE :",
+            route_ok,
+        )
+
+        if expected_source_fragments:
+            print(
+                "SOURCES CORRECTES :",
+                sources_ok,
+            )
+
         print(after_answer)
 
         rows.append(
@@ -199,21 +322,26 @@ def main():
                 "category": case["category"],
                 "question": question,
                 "expected_terms": " | ".join(
-                    expected
+                    expected_terms
                 ),
+                "expected_route": expected_route,
                 "before_system": "rag_only",
                 "before_correct": before_ok,
                 "before_answer": before_answer,
-                "after_system": "hybrid_rag_sql",
-                "after_route": after_result[
-                    "route"
-                ],
+                "after_system": (
+                    "hybrid_rag_sql"
+                ),
+                "after_route": after_route,
+                "route_correct": route_ok,
+                "sources_correct": sources_ok,
                 "after_correct": after_ok,
                 "after_answer": after_answer,
             }
         )
 
-    df = pd.DataFrame(rows)
+    df = pd.DataFrame(
+        rows
+    )
 
     df.to_csv(
         OUTPUT_PATH,
@@ -232,22 +360,25 @@ def main():
 
     print()
     print("=" * 100)
-    print("RESULTATS AVANT / APRES")
+    print(
+        "RESULTATS AVANT / APRES"
+    )
     print("=" * 100)
 
     print(
-        f"RAG seul        : "
+        f"RAG seul                 : "
         f"{before_score}/{total} "
         f"({before_score / total:.1%})"
     )
 
     print(
-        f"RAG + SQL Tool  : "
+        f"RAG + SQL + Hybrid       : "
         f"{after_score}/{total} "
         f"({after_score / total:.1%})"
     )
 
     print()
+
     print(
         "CSV :",
         OUTPUT_PATH,
