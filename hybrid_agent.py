@@ -5,6 +5,7 @@ import logfire
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_ollama import ChatOllama
 
+from plot_tool import PlotTool
 from sql_tool import nba_sql_tool
 from utils.observability import configure_observability
 from utils.structured_answer import generate_structured_answer
@@ -58,6 +59,7 @@ class HybridNBAAgent:
         )
 
         self.vector_store = VectorStoreManager()
+        self.plot_tool = PlotTool()
 
     def _route(
         self,
@@ -169,6 +171,111 @@ class HybridNBAAgent:
             for pattern in textual_patterns
         )
 
+    def _has_plot_intent(
+        self,
+        question: str,
+    ) -> bool:
+        """
+        Détecte une demande explicite
+        de visualisation graphique.
+        """
+        normalized = question.lower().strip()
+
+        plot_patterns = [
+            r"\bgraphique\b",
+            r"\bgraphe\b",
+            r"\bvisualis\w*\b",
+            r"\bcourbe\b",
+            r"\bhistogramme\b",
+            r"\bdiagramme\b",
+            r"\bcamembert\b",
+            r"\bbarres?\b",
+            r"\bplot\b",
+            r"\bchart\b",
+        ]
+
+        return any(
+            re.search(
+                pattern,
+                normalized,
+            )
+            for pattern in plot_patterns
+        )
+
+    def _attach_plot(
+        self,
+        question: str,
+        result: dict,
+    ) -> dict:
+        """
+        Génère un graphique à partir des
+        données structurées retournées par SQL.
+        """
+        data = result.get("data") or []
+
+        if not data:
+            result["visualization_requested"] = True
+            result["plot_path"] = None
+            return result
+
+        first_row = data[0]
+
+        categorical_keys = [
+            key
+            for key, value in first_row.items()
+            if not isinstance(value, (int, float))
+        ]
+
+        numeric_keys = [
+            key
+            for key, value in first_row.items()
+            if isinstance(value, (int, float))
+            and not isinstance(value, bool)
+        ]
+
+        if not categorical_keys or not numeric_keys:
+            result["visualization_requested"] = True
+            result["plot_path"] = None
+            return result
+
+        x_key = categorical_keys[0]
+        y_key = numeric_keys[0]
+
+        normalized = question.lower()
+
+        if "camembert" in normalized or "pie" in normalized:
+            chart_type = "pie"
+        elif "courbe" in normalized or "line" in normalized:
+            chart_type = "line"
+        else:
+            chart_type = "bar"
+
+        with logfire.span(
+            "plot_generation",
+            chart_type=chart_type,
+            x=x_key,
+            y=y_key,
+        ):
+            plot_path = self.plot_tool.invoke(
+                {
+                    "data": data,
+                    "chart_type": chart_type,
+                    "x": x_key,
+                    "y": y_key,
+                    "title": question,
+                    "xlabel": x_key,
+                    "ylabel": y_key,
+                }
+            )
+
+        result["visualization_requested"] = True
+        result["plot_path"] = plot_path
+        result["plot_type"] = chart_type
+        result["plot_x"] = x_key
+        result["plot_y"] = y_key
+
+        return result
+
     def _answer_from_sql(
         self,
         question: str,
@@ -225,7 +332,10 @@ RÈGLES:
 - sois précis et concis ;
 - n'invente aucune valeur ;
 - ne cite que les données présentes ;
-- si aucune ligne n'est retournée, indique-le clairement.
+- si aucune ligne n'est retournée, indique-le clairement ;
+- ne génère jamais de lien, URL ou image Markdown ;
+- si un graphique est demandé, fournis seulement la synthèse textuelle :
+  le graphique réel est généré localement par PlotTool.
 """
 
             with logfire.span(
@@ -563,6 +673,9 @@ RÈGLES:
 - toute opinion ou perception doit provenir
   du résultat RAG ;
 - n'invente aucune information ;
+- ne génère jamais de lien, URL ou image Markdown ;
+- si un graphique est demandé, fournis seulement la synthèse textuelle :
+  le graphique réel est généré localement par PlotTool ;
 - ne transforme pas une opinion Reddit
   en fait objectif ;
 - si le corpus ne permet pas de répondre
@@ -642,10 +755,17 @@ RÈGLES:
                 )
             )
 
+            plot_intent = (
+                self._has_plot_intent(
+                    question
+                )
+            )
+
             logfire.info(
                 "routing_detection",
                 numeric_intent=numeric_intent,
                 textual_intent=textual_intent,
+                plot_intent=plot_intent,
             )
 
             if (
@@ -660,9 +780,17 @@ RÈGLES:
                     ),
                 )
 
-                return self._answer_hybrid(
+                result = self._answer_hybrid(
                     question
                 )
+
+                if plot_intent:
+                    result = self._attach_plot(
+                        question,
+                        result,
+                    )
+
+                return result
 
             if numeric_intent:
                 logfire.info(
@@ -673,9 +801,17 @@ RÈGLES:
                     ),
                 )
 
-                return self._answer_from_sql(
+                result = self._answer_from_sql(
                     question
                 )
+
+                if plot_intent:
+                    result = self._attach_plot(
+                        question,
+                        result,
+                    )
+
+                return result
 
             routed_response = self._route(
                 question

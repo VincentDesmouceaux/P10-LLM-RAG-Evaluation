@@ -828,9 +828,57 @@ afin de mesurer l'impact sur la qualité du texte extrait et sur les performance
 
 ## PlotTool
 
-Créer un Tool LangChain capable de générer dynamiquement des visualisations avec Matplotlib à partir des données extraites par SQL.
+Une fonctionnalité optionnelle de visualisation dynamique a été implémentée avec LangChain et Matplotlib.
 
-Cette partie n'est pas nécessaire à la validation de la mission principale.
+Le fichier `plot_tool.py` génère automatiquement des graphiques à partir des données structurées retournées par SQLite.
+
+### Pipeline
+
+```text
+Question utilisateur
+        ↓
+HybridNBAAgent
+        ↓
+Détection de l'intention graphique
+        ↓
+SQL Tool
+        ↓
+SQLite
+        ↓
+Données structurées
+        ↓
+PlotTool
+        ↓
+Matplotlib
+        ↓
+PNG dans generated_plots/
+        ↓
+Affichage Streamlit
+```
+
+Les routes principales `sql`, `rag` et `hybrid` sont conservées. La visualisation est ajoutée comme fonctionnalité complémentaire lorsqu'une demande graphique est détectée.
+
+### Types de graphiques
+
+Le Tool supporte `bar`, `line` et `pie`.
+
+Les valeurs représentées proviennent des résultats SQL. Le LLM ne fabrique pas les données numériques du graphique.
+
+### Exemple
+
+`Montre-moi les 5 joueurs ayant marqué le plus de points sous forme de graphique.`
+
+Le système détecte l'intention numérique et graphique, interroge SQLite, transmet les lignes retournées à `PlotTool`, génère un PNG puis l'affiche automatiquement dans Streamlit.
+
+La génération est observable dans les traces Logfire avec le span `plot_generation`.
+
+### Tests
+
+La fonctionnalité est couverte par `tests/test_plot_tool.py` et `tests/test_hybrid_plot_integration.py`.
+
+Les PNG générés sont exclus du versioning Git via `.gitignore`. Le fichier `generated_plots/.gitkeep` conserve le dossier dans l'architecture du projet.
+
+Cette fonctionnalité est optionnelle et ne modifie pas le périmètre obligatoire figé dans la version `v1.0.0`.
 
 ---
 
