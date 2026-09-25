@@ -779,7 +779,6 @@ P10_DSML/
 │       └── plot_tool.py
 ├── tests/
 ├── vector_db/
-├── vector_db_baseline_mistral/
 ├── README.md
 └── requirements.txt
 ```
