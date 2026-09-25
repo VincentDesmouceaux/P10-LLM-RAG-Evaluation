@@ -469,7 +469,7 @@ inputs/
 Pour reconstruire l'index documentaire :
 
 ```bash
-python indexer.py
+python -m scripts.indexer
 ```
 
 Le vector store est enregistré dans :
@@ -761,7 +761,9 @@ P10_DSML/
 ├── evaluate_ragas.py
 ├── evaluate_reddit_ragas.py
 ├── hybrid_agent.py
-├── indexer.py
+├── scripts/
+│   ├── __init__.py
+│   └── indexer.py
 ├── load_excel_to_db.py
 ├── sql_tool.py
 ├── requirements.txt

@@ -116,7 +116,7 @@ class VectorStoreManager:
 
                 logging.warning(
                     "L'index doit être reconstruit avec "
-                    "'python indexer.py'."
+                    "'python -m scripts.indexer'."
                 )
 
                 self.index = None
