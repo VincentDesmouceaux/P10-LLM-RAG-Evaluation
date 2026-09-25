@@ -11,7 +11,7 @@ from pydantic_ai.models.function import (
     FunctionModel,
 )
 
-from utils.observability import (
+from sportsee.observability.logfire_config import (
     configure_observability,
 )
 from utils.schemas import RAGAnswer

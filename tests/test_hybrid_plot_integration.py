@@ -2,7 +2,7 @@ from pathlib import Path
 
 from hybrid_agent import HybridNBAAgent
 from plot_tool import PlotTool
-from utils.observability import configure_observability
+from sportsee.observability.logfire_config import configure_observability
 
 
 def test_hybrid_agent_generates_plot_for_sql_request(
