@@ -30,6 +30,11 @@ OUTPUT_PATH = Path(
     "reddit_ragas_final.csv"
 )
 
+ROBUSTNESS_OUTPUT_PATH = Path(
+    "evaluation_results/"
+    "reddit_robustness.csv"
+)
+
 
 TEST_CASES = [
     {
@@ -90,6 +95,51 @@ TEST_CASES = [
 ]
 
 
+ROBUSTNESS_CASES = [
+    {
+        "category": "out_of_domain",
+        "question": (
+            "Quelle est la capitale de l'Australie ?"
+        ),
+        "expected_behavior": "abstention",
+        "description": (
+            "Question hors du domaine NBA. "
+            "Le système ne doit pas fabriquer une réponse "
+            "à partir du corpus documentaire."
+        ),
+    },
+    {
+        "category": "missing_context",
+        "question": (
+            "Selon les documents Reddit, quel était "
+            "le salaire exact de Reggie Miller en 1994 ?"
+        ),
+        "expected_behavior": "abstention",
+        "description": (
+            "L'information demandée n'est pas supposée être "
+            "présente dans le corpus. Le système doit signaler "
+            "que le contexte disponible est insuffisant."
+        ),
+    },
+]
+
+
+ABSTENTION_MARKERS = (
+    "je ne dispose pas",
+    "je n'ai pas",
+    "aucune information",
+    "pas d'information",
+    "information n'est pas",
+    "information ne figure pas",
+    "ne figure pas",
+    "les documents ne",
+    "le contexte ne",
+    "contexte insuffisant",
+    "ne permet pas de répondre",
+    "impossible de déterminer",
+    "hors du domaine",
+)
+
 
 def build_contexts(
     vector_store,
@@ -106,14 +156,22 @@ def build_contexts(
     ]
 
 
-def main():
-    OUTPUT_PATH.parent.mkdir(
-        parents=True,
-        exist_ok=True,
+def detect_abstention(answer):
+    """Détecte un signal explicite d'abstention dans la réponse."""
+
+    normalized_answer = str(answer).lower()
+
+    return any(
+        marker in normalized_answer
+        for marker in ABSTENTION_MARKERS
     )
 
-    vector_store = VectorStoreManager()
-    agent = HybridNBAAgent()
+
+def run_ragas_evaluation(
+    vector_store,
+    agent,
+):
+    """Exécute le benchmark RAGAS de référence."""
 
     samples = []
     metadata = []
@@ -291,8 +349,159 @@ def main():
     )
 
     print(
-        "CSV :",
+        "CSV RAGAS :",
         OUTPUT_PATH,
+    )
+
+
+def run_robustness_evaluation(
+    vector_store,
+    agent,
+):
+    """
+    Teste séparément les comportements hors domaine
+    et en contexte documentaire insuffisant.
+
+    Ces cas ne sont volontairement pas intégrés aux moyennes RAGAS.
+    """
+
+    rows = []
+
+    print()
+    print("=" * 100)
+    print("TESTS DE ROBUSTESSE")
+    print("=" * 100)
+
+    for case in ROBUSTNESS_CASES:
+        question = case["question"]
+
+        print()
+        print("-" * 100)
+        print(
+            f"CATEGORIE : "
+            f"{case['category']}"
+        )
+        print("-" * 100)
+
+        print(
+            "QUESTION :",
+            question,
+        )
+
+        contexts = build_contexts(
+            vector_store,
+            question,
+        )
+
+        result = agent.ask(
+            question
+        )
+
+        answer = result["answer"]
+
+        abstention_detected = detect_abstention(
+            answer
+        )
+
+        passed = (
+            case["expected_behavior"] == "abstention"
+            and abstention_detected
+        )
+
+        print(
+            "ROUTE    :",
+            result["route"],
+        )
+
+        print(
+            "REPONSE  :",
+            answer,
+        )
+
+        print(
+            "ATTENDU  :",
+            case["expected_behavior"],
+        )
+
+        print(
+            "RESULTAT  :",
+            "PASS" if passed else "FAIL",
+        )
+
+        rows.append(
+            {
+                "category": case["category"],
+                "question": question,
+                "route": result["route"],
+                "answer": answer,
+                "expected_behavior": case[
+                    "expected_behavior"
+                ],
+                "abstention_detected": abstention_detected,
+                "passed": passed,
+                "retrieved_context_count": len(contexts),
+                "description": case["description"],
+            }
+        )
+
+    robustness_df = pd.DataFrame(
+        rows
+    )
+
+    robustness_df.to_csv(
+        ROBUSTNESS_OUTPUT_PATH,
+        index=False,
+    )
+
+    print()
+    print("=" * 100)
+    print("SYNTHESE ROBUSTESSE")
+    print("=" * 100)
+
+    print(
+        robustness_df[
+            [
+                "category",
+                "route",
+                "expected_behavior",
+                "abstention_detected",
+                "passed",
+            ]
+        ].to_string(
+            index=False
+        )
+    )
+
+    print()
+    print(
+        "Tests réussis :",
+        f"{robustness_df['passed'].sum()}"
+        f"/{len(robustness_df)}",
+    )
+
+    print(
+        "CSV robustesse :",
+        ROBUSTNESS_OUTPUT_PATH,
+    )
+
+
+def main():
+    OUTPUT_PATH.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    vector_store = VectorStoreManager()
+    agent = HybridNBAAgent()
+
+    run_ragas_evaluation(
+        vector_store,
+        agent,
+    )
+
+    run_robustness_evaluation(
+        vector_store,
+        agent,
     )
 
 
