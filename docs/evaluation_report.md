@@ -296,11 +296,46 @@ Les métriques utilisées sont :
 - **Faithfulness** ;
 - **Answer Relevancy**.
 
+#### Seuils d'interprétation
+
+Afin de faciliter l'analyse des résultats, des seuils internes au projet sont utilisés comme repères d'interprétation. Ils ne constituent pas des standards officiels de RAGAS.
+
+| Score | Interprétation |
+|---|---|
+| >= 0.80 | Résultat satisfaisant |
+| 0.60 à 0.79 | Résultat acceptable mais à surveiller |
+| < 0.60 | Axe d'amélioration prioritaire |
+
+Ces seuils permettent d'identifier rapidement les métriques nécessitant une analyse qualitative complémentaire. Ils doivent être interprétés avec prudence, notamment lorsque le benchmark contient peu de cas de test.
+
 Les cas de test sont répartis en plusieurs catégories :
 
 - simple ;
 - complexe ;
 - bruité.
+
+#### Tests de robustesse complémentaires
+
+Le benchmark RAGAS est complété par deux scénarios de robustesse qui ne sont volontairement pas intégrés aux moyennes RAGAS :
+
+| Catégorie | Objectif | Comportement attendu | Résultat |
+|---|---|---|---|
+| out_of_domain | Question hors du domaine NBA | Abstention explicite | PASS |
+| missing_context | Information absente du corpus | Signalement d'un contexte insuffisant | PASS |
+
+Les deux scénarios ont été validés, soit **2 tests réussis sur 2**.
+
+Ces contrôles sont évalués séparément afin de ne pas modifier les moyennes du benchmark RAGAS de référence.
+
+Le retriever FAISS retourne malgré tout cinq voisins pour chaque requête, y compris lorsqu'une question est hors domaine ou que l'information recherchée est absente. La robustesse repose donc ici sur la capacité du système de génération à reconnaître que les contextes récupérés ne permettent pas de produire une réponse fondée.
+
+Le contrôle PASS/FAIL utilise une détection déterministe de formulations d'abstention. Cette méthode constitue une heuristique de test reproductible et non une mesure sémantique parfaite.
+
+Les résultats détaillés sont enregistrés dans :
+
+evaluation_results/reddit_robustness.csv
+
+
 
 ### 9.2 Évaluation des réponses numériques
 
