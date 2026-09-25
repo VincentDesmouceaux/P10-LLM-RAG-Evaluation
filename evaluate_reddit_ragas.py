@@ -15,7 +15,7 @@ from ragas.metrics import (
 )
 
 from hybrid_agent import HybridNBAAgent
-from utils.vector_store import VectorStoreManager
+from sportsee.rag.vector_store import VectorStoreManager
 
 
 OLLAMA_MODEL = "qwen2.5:7b-instruct"

@@ -5,7 +5,7 @@ from typing import Optional
 
 from sportsee.core.config import INPUT_DIR # INPUT_DATA_URL (décommentez si besoin)
 from utils.data_loader import download_and_extract_zip, load_and_parse_files
-from utils.vector_store import VectorStoreManager
+from sportsee.rag.vector_store import VectorStoreManager
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 

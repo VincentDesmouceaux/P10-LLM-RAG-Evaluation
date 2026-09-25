@@ -9,7 +9,7 @@ from plot_tool import PlotTool
 from sql_tool import nba_sql_tool
 from sportsee.observability.logfire_config import configure_observability
 from utils.structured_answer import generate_structured_answer
-from utils.vector_store import VectorStoreManager
+from sportsee.rag.vector_store import VectorStoreManager
 
 
 OLLAMA_MODEL = "qwen2.5:7b-instruct"

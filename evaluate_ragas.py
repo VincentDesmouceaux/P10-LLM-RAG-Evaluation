@@ -26,7 +26,7 @@ from sportsee.core.config import (
     MODEL_NAME,
     SEARCH_K,
 )
-from utils.vector_store import VectorStoreManager
+from sportsee.rag.vector_store import VectorStoreManager
 
 
 OLLAMA_JUDGE_MODEL = "qwen2.5:7b-instruct"

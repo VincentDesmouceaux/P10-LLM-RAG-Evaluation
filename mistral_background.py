@@ -8,7 +8,7 @@ from evaluate_ragas import (
     generate_response,
     retrieve_contexts,
 )
-from utils.vector_store import VectorStoreManager
+from sportsee.rag.vector_store import VectorStoreManager
 
 
 CHECK_INTERVAL_SECONDS = 600
