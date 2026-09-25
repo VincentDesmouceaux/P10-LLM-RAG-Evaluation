@@ -73,7 +73,7 @@ class PlotTool(BaseTool):
             ) from exc
 
         output_dir = (
-            Path(__file__).resolve().parent
+            Path(__file__).resolve().parents[2]
             / "generated_plots"
         )
         output_dir.mkdir(

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from sportsee.agent.hybrid_agent import HybridNBAAgent
-from plot_tool import PlotTool
+from sportsee.tools.plot_tool import PlotTool
 from sportsee.observability.logfire_config import configure_observability
 
 
