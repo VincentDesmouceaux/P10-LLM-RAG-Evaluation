@@ -257,7 +257,7 @@ def load_and_parse_files(input_dir: str) -> List[Dict[str, any]]:
                             "filename": file_path.name,
                             "sheet": sheet_name,
                             "category": source_folder,
-                            "full_path": str(file_path.resolve())
+                            "relative_path": str(relative_path)
                         }
                     })
             else: # Pour tous les autres types de fichiers
@@ -267,7 +267,7 @@ def load_and_parse_files(input_dir: str) -> List[Dict[str, any]]:
                         "source": str(relative_path),
                         "filename": file_path.name,
                         "category": source_folder,
-                        "full_path": str(file_path.resolve())
+                        "relative_path": str(relative_path)
                     }
                 })
 
