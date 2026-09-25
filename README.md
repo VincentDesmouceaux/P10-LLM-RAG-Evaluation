@@ -534,7 +534,7 @@ python -m scripts.evaluate_ragas
 Une évaluation complémentaire du corpus Reddit est disponible avec :
 
 ```bash
-python evaluate_reddit_ragas.py
+python -m scripts.evaluate_reddit_ragas
 ```
 
 Les résultats sont enregistrés dans :
@@ -757,12 +757,12 @@ P10_DSML/
 │   ├── structured_answer.py
 │   └── vector_store.py
 │
-├── evaluate_reddit_ragas.py
 ├── hybrid_agent.py
 ├── scripts/
 │   ├── __init__.py
 │   ├── compare_before_after.py
 │   ├── evaluate_ragas.py
+│   ├── evaluate_reddit_ragas.py
 │   └── indexer.py
 ├── load_excel_to_db.py
 ├── sql_tool.py
