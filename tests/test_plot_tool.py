@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from plot_tool import PlotTool
+from sportsee.tools.plot_tool import PlotTool
 
 
 @pytest.fixture

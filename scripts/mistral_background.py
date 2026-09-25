@@ -3,12 +3,12 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from evaluate_ragas import (
+from scripts.evaluate_ragas import (
     TEST_CASES,
     generate_response,
     retrieve_contexts,
 )
-from utils.vector_store import VectorStoreManager
+from sportsee.rag.vector_store import VectorStoreManager
 
 
 CHECK_INTERVAL_SECONDS = 600

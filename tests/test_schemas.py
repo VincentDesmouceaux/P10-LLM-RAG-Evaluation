@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from utils.schemas import (
+from sportsee.rag.schemas import (
     DocumentChunk,
     RAGAnswer,
     RAGQuery,

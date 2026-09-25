@@ -1,107 +1,232 @@
-# utils/data_loader.py
-import os
-import requests
-import zipfile
 import io
-from pathlib import Path
-from typing import List, Dict, Optional, Union
 import logging
+import os
+import zipfile
+from pathlib import Path
+from typing import Dict, List, Optional, Union
+
 import numpy as np
-from tqdm import tqdm # Ajout de tqdm
+import requests
+from tqdm import tqdm
 
-# --- Importations pour OCR ---
-try:
-    import fitz  # PyMuPDF
-    from PIL import Image
-    import easyocr
 
-    # Initialiser le lecteur EasyOCR une seule fois
-    logging.info("Initialisation du lecteur EasyOCR...")
-    reader = easyocr.Reader(['en', 'fr']) 
-    logging.info("Lecteur EasyOCR initialisé.")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
 
-except ImportError as e:
-    logging.warning(f"Modules OCR (PyMuPDF, Pillow, easyocr) non installés ou erreur: {e}. L'OCR pour PDF ne sera pas disponible.")
-    fitz = None
-    Image = None
-    easyocr = None
-    reader = None
-except Exception as e:
-    logging.error(f"Erreur inattendue lors du chargement des modules/modèle OCR: {e}")
-    fitz = None
-    Image = None
-    easyocr = None
-    reader = None
 
-# Configuration du logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# Composants OCR chargés à la demande.
+# Aucun modèle EasyOCR n'est initialisé lors de l'import du module.
+_ocr_reader = None
+_ocr_pymupdf = None
+_ocr_image_class = None
+_ocr_initialization_attempted = False
 
-# --- Fonctions d'extraction de texte ---
 
-def extract_text_from_pdf_with_ocr(file_path: str) -> Optional[str]:
-    """Extrait le texte d'un fichier PDF en utilisant l'OCR (EasyOCR)."""
-    if not fitz or not reader:
-        logging.warning("Modules/Modèle OCR non disponibles. Impossible d'effectuer l'OCR.")
+def _get_ocr_components():
+    """
+    Charge PyMuPDF, Pillow et EasyOCR uniquement lorsqu'un fallback OCR
+    est réellement nécessaire.
+
+    Le chargement est effectué au maximum une fois par processus.
+    """
+    global _ocr_reader
+    global _ocr_pymupdf
+    global _ocr_image_class
+    global _ocr_initialization_attempted
+
+    if _ocr_initialization_attempted:
+        return (
+            _ocr_pymupdf,
+            _ocr_image_class,
+            _ocr_reader,
+        )
+
+    _ocr_initialization_attempted = True
+
+    try:
+        import pymupdf
+        from PIL import Image
+        import easyocr
+
+        logging.info("Initialisation du lecteur EasyOCR...")
+
+        _ocr_reader = easyocr.Reader(["en", "fr"])
+        _ocr_pymupdf = pymupdf
+        _ocr_image_class = Image
+
+        logging.info("Lecteur EasyOCR initialisé.")
+
+    except ImportError as error:
+        logging.warning(
+            "Dépendances OCR indisponibles : %s. "
+            "Le fallback OCR sera désactivé.",
+            error,
+        )
+
+    except Exception as error:
+        logging.error(
+            "Impossible d'initialiser EasyOCR : %s",
+            error,
+        )
+
+    return (
+        _ocr_pymupdf,
+        _ocr_image_class,
+        _ocr_reader,
+    )
+
+
+def extract_text_from_pdf_with_ocr(
+    file_path: str,
+) -> Optional[str]:
+    """
+    Extrait le texte d'un PDF avec EasyOCR.
+
+    Les dépendances OCR et le modèle ne sont chargés qu'au premier
+    appel effectif de cette fonction.
+    """
+    pymupdf, image_class, ocr_reader = _get_ocr_components()
+
+    if (
+        pymupdf is None
+        or image_class is None
+        or ocr_reader is None
+    ):
+        logging.warning(
+            "OCR indisponible pour %s.",
+            file_path,
+        )
         return None
 
     text_content = []
-    try:
-        doc = fitz.open(file_path)
-        # Utiliser tqdm pour la barre de progression
-        for page_num in tqdm(range(len(doc)), desc=f"OCR de {os.path.basename(file_path)}"):
-            page = doc.load_page(page_num)
-            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2)) # Augmenter la résolution pour l'OCR
-            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-            
-            try:
-                img_np = np.array(img)
-                results = reader.readtext(img_np)
-                page_text = "\n".join([res[1] for res in results])
-                text_content.append(page_text)
-                # logging.info(f"OCR effectuée sur la page {page_num + 1} de {file_path} avec EasyOCR") # Commenté pour éviter le spam de logs avec tqdm
-            except Exception as ocr_e:
-                logging.error(f"Erreur lors de l'OCR de la page {page_num + 1} de {file_path} avec EasyOCR: {ocr_e}")
-                continue
 
-        doc.close()
+    try:
+        document = pymupdf.open(file_path)
+
+        for page_num in tqdm(
+            range(len(document)),
+            desc=f"OCR de {os.path.basename(file_path)}",
+        ):
+            page = document.load_page(page_num)
+
+            pixmap = page.get_pixmap(
+                matrix=pymupdf.Matrix(2, 2)
+            )
+
+            image = image_class.frombytes(
+                "RGB",
+                [pixmap.width, pixmap.height],
+                pixmap.samples,
+            )
+
+            try:
+                image_array = np.array(image)
+                results = ocr_reader.readtext(image_array)
+
+                page_text = "\n".join(
+                    result[1]
+                    for result in results
+                )
+
+                text_content.append(page_text)
+
+            except Exception as error:
+                logging.error(
+                    "Erreur OCR page %s de %s : %s",
+                    page_num + 1,
+                    file_path,
+                    error,
+                )
+
+        document.close()
+
         full_text = "\n".join(text_content).strip()
+
         if full_text:
-            logging.info(f"Texte extrait via OCR de PDF: {file_path} ({len(full_text)} caractères)")
+            logging.info(
+                "Texte extrait via OCR de %s (%s caractères).",
+                file_path,
+                len(full_text),
+            )
             return full_text
-        else:
-            logging.warning(f"Aucun texte significatif extrait via OCR de {file_path}.")
-            return None
-    except Exception as e:
-        logging.error(f"Erreur lors de l'ouverture ou du traitement OCR du PDF {file_path}: {e}")
+
+        logging.warning(
+            "Aucun texte significatif extrait via OCR de %s.",
+            file_path,
+        )
         return None
 
-def extract_text_from_pdf(file_path: str) -> Optional[str]:
-    """Extrait le texte d'un fichier PDF, avec fallback OCR si peu de texte est trouvé."""
+    except Exception as error:
+        logging.error(
+            "Erreur pendant le traitement OCR de %s : %s",
+            file_path,
+            error,
+        )
+        return None
+
+
+def extract_text_from_pdf(
+    file_path: str,
+) -> Optional[str]:
+    """
+    Extrait le texte d'un PDF avec PyPDF2.
+
+    EasyOCR n'est utilisé qu'en fallback si l'extraction standard
+    produit moins de 100 caractères ou échoue.
+    """
     try:
         from PyPDF2 import PdfReader
-        reader = PdfReader(file_path)
-        text = "".join(page.extract_text() + "\n" for page in reader.pages if page.extract_text())
-        
-        if len(text.strip()) < 100: # Si très peu de texte est extrait, tenter l'OCR
-            logging.info(f"Peu de texte trouvé dans {file_path} via extraction standard ({len(text.strip())} caractères). Tentative d'OCR...")
+
+        pdf_reader = PdfReader(file_path)
+
+        extracted_pages = []
+
+        for page in pdf_reader.pages:
+            page_text = page.extract_text()
+
+            if page_text:
+                extracted_pages.append(page_text)
+
+        text = "\n".join(extracted_pages)
+
+        if len(text.strip()) < 100:
+            logging.info(
+                "Peu de texte trouvé dans %s via extraction standard "
+                "(%s caractères). Tentative d'OCR...",
+                file_path,
+                len(text.strip()),
+            )
+
             ocr_text = extract_text_from_pdf_with_ocr(file_path)
+
             if ocr_text:
                 return ocr_text
-            else:
-                logging.warning(f"L'OCR n'a pas non plus produit de texte significatif pour {file_path}.")
-                return text # Retourne le peu de texte trouvé ou vide
-        
-        logging.info(f"Texte extrait de PDF: {file_path} ({len(text)} caractères)")
+
+            logging.warning(
+                "Le fallback OCR n'a pas produit de texte "
+                "significatif pour %s.",
+                file_path,
+            )
+            return text
+
+        logging.info(
+            "Texte extrait de PDF : %s (%s caractères).",
+            file_path,
+            len(text),
+        )
         return text
-    except Exception as e:
-        logging.error(f"Erreur extraction PDF {file_path}: {e}. Tentative d'OCR en dernier recours...")
-        # Si l'extraction standard échoue complètement, tenter l'OCR
-        ocr_text = extract_text_from_pdf_with_ocr(file_path)
-        if ocr_text:
-            return ocr_text
-        else:
-            logging.warning(f"L'OCR n'a pas non plus produit de texte significatif après échec de l'extraction standard pour {file_path}.")
-            return None
+
+    except Exception as error:
+        logging.error(
+            "Erreur extraction PDF %s : %s. "
+            "Tentative d'OCR en dernier recours...",
+            file_path,
+            error,
+        )
+
+        return extract_text_from_pdf_with_ocr(file_path)
 
 
 def extract_text_from_docx(file_path: str) -> Optional[str]:
@@ -258,7 +383,7 @@ def load_and_parse_files(input_dir: str) -> List[Dict[str, any]]:
                             "filename": file_path.name,
                             "sheet": sheet_name,
                             "category": source_folder,
-                            "full_path": str(file_path.resolve())
+                            "relative_path": str(relative_path)
                         }
                     })
             else: # Pour tous les autres types de fichiers
@@ -268,7 +393,7 @@ def load_and_parse_files(input_dir: str) -> List[Dict[str, any]]:
                         "source": str(relative_path),
                         "filename": file_path.name,
                         "category": source_folder,
-                        "full_path": str(file_path.resolve())
+                        "relative_path": str(relative_path)
                     }
                 })
 

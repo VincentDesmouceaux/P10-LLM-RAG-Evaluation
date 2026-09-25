@@ -1,5 +1,4 @@
 streamlit==1.44.1
-mistralai==0.4.2
 langchain==0.3.23
 faiss-cpu==1.10.0
 PyPDF2==3.0.1
@@ -8,12 +7,11 @@ pandas==2.2.3
 openpyxl==3.1.5
 python-dotenv==1.1.0
 requests==2.32.3
-streamlit-feedback==0.1.4
-pymupdf>=1.22.0
-pillow>=9.0.0
+pymupdf==1.28.2
+pillow==11.3.0
 ragas==0.3.9
-easyocr
-tqdm
+easyocr==1.7.2
+tqdm==4.70.1
 sentence-transformers==6.1.0
 langchain-mistralai==0.2.10
 langchain-ollama==0.2.3
@@ -23,3 +21,8 @@ openai==1.109.1
 protobuf==5.29.6
 pytest==9.1.1
 matplotlib==3.11.2
+langchain-community==0.3.21
+langchain-core==0.3.86
+ollama==0.6.2
+numpy==2.4.6
+pydantic==2.13.5

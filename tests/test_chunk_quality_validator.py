@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from utils.chunk_quality_validator import (
+from sportsee.rag.chunk_quality_validator import (
     ChunkQualityAssessment,
     _normalize_score,
 )
