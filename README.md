@@ -550,7 +550,7 @@ evaluation_results/
 Pour comparer le comportement numérique avant et après intégration du SQL Tool :
 
 ```bash
-python compare_before_after.py
+python -m scripts.compare_before_after
 ```
 
 Le CSV produit est :
@@ -757,12 +757,12 @@ P10_DSML/
 │   ├── structured_answer.py
 │   └── vector_store.py
 │
-├── compare_before_after.py
 ├── evaluate_ragas.py
 ├── evaluate_reddit_ragas.py
 ├── hybrid_agent.py
 ├── scripts/
 │   ├── __init__.py
+│   ├── compare_before_after.py
 │   └── indexer.py
 ├── load_excel_to_db.py
 ├── sql_tool.py
