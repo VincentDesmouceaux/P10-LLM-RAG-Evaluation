@@ -522,13 +522,13 @@ python -m pytest -q
 Le script principal d'évaluation est :
 
 ```text
-evaluate_ragas.py
+scripts/evaluate_ragas.py
 ```
 
 Exécution :
 
 ```bash
-python evaluate_ragas.py
+python -m scripts.evaluate_ragas
 ```
 
 Une évaluation complémentaire du corpus Reddit est disponible avec :
@@ -757,12 +757,12 @@ P10_DSML/
 │   ├── structured_answer.py
 │   └── vector_store.py
 │
-├── evaluate_ragas.py
 ├── evaluate_reddit_ragas.py
 ├── hybrid_agent.py
 ├── scripts/
 │   ├── __init__.py
 │   ├── compare_before_after.py
+│   ├── evaluate_ragas.py
 │   └── indexer.py
 ├── load_excel_to_db.py
 ├── sql_tool.py
