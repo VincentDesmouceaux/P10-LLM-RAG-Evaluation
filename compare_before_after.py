@@ -3,7 +3,7 @@ from pathlib import Path
 import pandas as pd
 
 from hybrid_agent import HybridNBAAgent
-from utils.structured_answer import generate_structured_answer
+from sportsee.agent.structured_answer import generate_structured_answer
 from sportsee.rag.vector_store import VectorStoreManager
 
 

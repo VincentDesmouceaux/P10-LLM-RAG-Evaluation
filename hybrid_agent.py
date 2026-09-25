@@ -8,7 +8,7 @@ from langchain_ollama import ChatOllama
 from plot_tool import PlotTool
 from sportsee.sql.sql_tool import nba_sql_tool
 from sportsee.observability.logfire_config import configure_observability
-from utils.structured_answer import generate_structured_answer
+from sportsee.agent.structured_answer import generate_structured_answer
 from sportsee.rag.vector_store import VectorStoreManager
 
 
