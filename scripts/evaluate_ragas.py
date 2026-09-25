@@ -2,9 +2,7 @@ from pathlib import Path
 from typing import Literal
 
 from langchain_ollama import ChatOllama
-from mistralai.client import MistralClient
-from mistralai.exceptions import MistralAPIStatusException
-from mistralai.models.chat_completion import ChatMessage
+from langchain_mistralai import ChatMistralAI
 from pydantic import BaseModel, Field
 
 from ragas import (
@@ -129,7 +127,7 @@ def generate_response(
     question: str,
     search_results: list[dict],
 ) -> str | None:
-    """Génère la réponse métier avec Mistral si l'API est disponible."""
+    """Génère la réponse métier via LangChain/Mistral si l'API est disponible."""
 
     if not MISTRAL_API_KEY:
         print()
@@ -144,29 +142,19 @@ def generate_response(
         question=question,
     )
 
-    client = MistralClient(
+    llm = ChatMistralAI(
         api_key=MISTRAL_API_KEY,
+        model_name=MODEL_NAME,
+        temperature=0.1,
         max_retries=0,
         timeout=15,
     )
 
-    messages = [
-        ChatMessage(
-            role="user",
-            content=final_prompt,
-        )
-    ]
-
     try:
-        response = client.chat(
-            model=MODEL_NAME,
-            messages=messages,
-            temperature=0.1,
-        )
+        response = llm.invoke(final_prompt)
+        return str(response.content).strip()
 
-        return response.choices[0].message.content
-
-    except MistralAPIStatusException as error:
+    except Exception as error:
         print()
         print("Mistral indisponible.")
         print(f"Erreur API : {error}")
