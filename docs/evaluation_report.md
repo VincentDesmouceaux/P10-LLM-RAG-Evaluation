@@ -900,3 +900,14 @@ Les principaux axes d'amélioration futurs sont :
 - comparer plusieurs modèles juges ;
 - améliorer la couverture des tests ;
 - intégrer éventuellement un outil de génération dynamique de graphiques.
+
+## Intégration de Mistral via LangChain
+
+Une intégration Mistral est disponible dans le pipeline d'évaluation via LangChain et ChatMistralAI.
+
+Cette intégration est utilisée pour la génération de réponses lorsque MISTRAL_API_KEY est disponible. Elle est distincte du pipeline d'embedding : les représentations vectorielles sont calculées localement avec SentenceTransformer MiniLM et stockées dans FAISS.
+
+En cas d'absence de clé API ou d'échec de l'appel Mistral, le script d'évaluation bascule en mode retrieval-only. Ce mécanisme permet de conserver l'évaluation du retrieval sans rendre l'ensemble du benchmark dépendant de la disponibilité d'un service externe.
+
+Le juge utilisé pour l'évaluation RAGAS de référence reste local via Ollama. Cette séparation améliore la reproductibilité du protocole expérimental.
+

@@ -900,3 +900,16 @@ Cette fonctionnalité est optionnelle et ne modifie pas le périmètre obligatoi
 # Auteur
 
 Projet réalisé par **Vincent Desmouceaux** dans le cadre du parcours Data Scientist / Machine Learning OpenClassrooms.
+
+## Intégration Mistral via LangChain
+
+Le projet intègre Mistral via LangChain dans le script d'évaluation scripts/evaluate_ragas.py.
+
+La génération utilise ChatMistralAI fourni par le package langchain-mistralai. La clé MISTRAL_API_KEY et le nom du modèle sont chargés depuis la configuration du projet.
+
+Cette intégration concerne la génération de réponse et non la création des embeddings. Les embeddings restent produits localement avec SentenceTransformer MiniLM puis indexés dans FAISS.
+
+Afin de conserver une évaluation reproductible lorsque l'API Mistral est indisponible, absente ou limitée, le script bascule automatiquement en mode retrieval-only. La récupération des contextes peut ainsi continuer à être évaluée indépendamment de l'accès à l'API externe.
+
+L'évaluation RAGAS de référence utilise par ailleurs un juge local via Ollama, ce qui limite la dépendance à un fournisseur externe.
+
