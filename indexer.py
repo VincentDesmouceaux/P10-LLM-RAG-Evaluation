@@ -3,7 +3,7 @@ import argparse
 import logging
 from typing import Optional
 
-from utils.config import INPUT_DIR # INPUT_DATA_URL (décommentez si besoin)
+from sportsee.core.config import INPUT_DIR # INPUT_DATA_URL (décommentez si besoin)
 from utils.data_loader import download_and_extract_zip, load_and_parse_files
 from utils.vector_store import VectorStoreManager
 

@@ -20,7 +20,7 @@ from ragas.metrics import (
     faithfulness,
 )
 
-from utils.config import (
+from sportsee.core.config import (
     EMBEDDING_MODEL,
     MISTRAL_API_KEY,
     MODEL_NAME,

@@ -15,7 +15,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 from sentence_transformers import SentenceTransformer
 
-from .config import (
+from sportsee.core.config import (
     EMBEDDING_MODEL,
     EMBEDDING_BATCH_SIZE,
     FAISS_INDEX_FILE,
