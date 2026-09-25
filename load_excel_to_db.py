@@ -5,7 +5,7 @@ from typing import Any
 import pandas as pd
 from pydantic import ValidationError
 
-from utils.db_schemas import (
+from sportsee.sql.schemas import (
     PlayerRecord,
     ReportRecord,
     StatRecord,
