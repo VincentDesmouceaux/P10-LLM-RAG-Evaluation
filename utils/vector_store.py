@@ -1,5 +1,5 @@
 import logging
-from utils.schemas import (
+from sportsee.rag.schemas import (
     EmbeddingBatch,
     PreparedChunk,
     RAGQuery,

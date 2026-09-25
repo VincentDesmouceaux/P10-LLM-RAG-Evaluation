@@ -14,7 +14,7 @@ from pydantic_ai.models.function import (
 from sportsee.observability.logfire_config import (
     configure_observability,
 )
-from utils.schemas import RAGAnswer
+from sportsee.rag.schemas import RAGAnswer
 
 
 OLLAMA_MODEL = "qwen2.5:7b-instruct"
