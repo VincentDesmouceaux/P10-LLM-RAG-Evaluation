@@ -2,7 +2,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from hybrid_agent import HybridNBAAgent
+from sportsee.agent.hybrid_agent import HybridNBAAgent
 
 
 st.set_page_config(

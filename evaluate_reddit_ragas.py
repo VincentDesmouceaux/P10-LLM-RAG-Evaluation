@@ -14,7 +14,7 @@ from ragas.metrics import (
     faithfulness,
 )
 
-from hybrid_agent import HybridNBAAgent
+from sportsee.agent.hybrid_agent import HybridNBAAgent
 from sportsee.rag.vector_store import VectorStoreManager
 
 

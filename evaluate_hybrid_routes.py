@@ -1,4 +1,4 @@
-from hybrid_agent import HybridNBAAgent
+from sportsee.agent.hybrid_agent import HybridNBAAgent
 
 
 TEST_CASES = [
