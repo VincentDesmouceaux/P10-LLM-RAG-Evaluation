@@ -235,7 +235,7 @@ data/nba_rag.db
 Le pipeline d'ingestion est :
 
 ```text
-load_excel_to_db.py
+sportsee/sql/loader.py
 ```
 
 Les données sont validées avec Pydantic avant insertion.
@@ -492,7 +492,7 @@ document_chunks.pkl
 Pour reconstruire la base SQLite à partir du fichier Excel :
 
 ```bash
-python load_excel_to_db.py
+python -m sportsee.sql.loader
 ```
 
 La base est créée dans :
@@ -724,40 +724,23 @@ Le rapport présente notamment :
 
 ```text
 P10_DSML/
+├── app/
+│   ├── __init__.py
+│   └── streamlit_app.py
 ├── data/
 │   └── nba_rag.db
-│
 ├── db/
 │   └── schema.sql
-│
 ├── docs/
 │   └── evaluation_report.md
-│
 ├── evaluation_results/
-│   ├── figures/
-│   ├── before_after_hybrid_comparison.csv
-│   ├── final_evaluation_summary.csv
-│   ├── reddit_ragas_final.csv
-│   └── retrieval_comparison.csv
-│
+├── generated_plots/
 ├── inputs/
 │   ├── Reddit 1.pdf
 │   ├── Reddit 2.pdf
 │   ├── Reddit 3.pdf
 │   ├── Reddit 4.pdf
 │   └── regular NBA.xlsx
-│
-├── tests/
-│   └── test_chunk_quality_validator.py
-│
-├── utils/
-│   ├── chunk_quality_validator.py
-│   ├── observability.py
-│   ├── schemas.py
-│   ├── structured_answer.py
-│   └── vector_store.py
-│
-├── hybrid_agent.py
 ├── scripts/
 │   ├── __init__.py
 │   ├── build_final_evaluation_summary.py
@@ -768,10 +751,37 @@ P10_DSML/
 │   ├── indexer.py
 │   ├── mistral_background.py
 │   └── plot_evaluation_results.py
-├── load_excel_to_db.py
-├── sql_tool.py
-├── requirements.txt
-└── README.md
+├── sportsee/
+│   ├── __init__.py
+│   ├── agent/
+│   │   ├── __init__.py
+│   │   ├── hybrid_agent.py
+│   │   └── structured_answer.py
+│   ├── core/
+│   │   ├── __init__.py
+│   │   └── config.py
+│   ├── observability/
+│   │   ├── __init__.py
+│   │   └── logfire_config.py
+│   ├── rag/
+│   │   ├── __init__.py
+│   │   ├── chunk_quality_validator.py
+│   │   ├── data_loader.py
+│   │   ├── schemas.py
+│   │   └── vector_store.py
+│   ├── sql/
+│   │   ├── __init__.py
+│   │   ├── loader.py
+│   │   ├── schemas.py
+│   │   └── sql_tool.py
+│   └── tools/
+│       ├── __init__.py
+│       └── plot_tool.py
+├── tests/
+├── vector_db/
+├── vector_db_baseline_mistral/
+├── README.md
+└── requirements.txt
 ```
 
 Cette structure est volontairement simplifiée afin de mettre en évidence les composants principaux.

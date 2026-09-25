@@ -170,7 +170,7 @@ Le schéma relationnel comporte les tables :
 
 Le chargement est réalisé avec :
 
-`load_excel_to_db.py`
+`sportsee/sql/loader.py`
 
 Les données sont validées avec Pydantic avant insertion dans la base.
 
