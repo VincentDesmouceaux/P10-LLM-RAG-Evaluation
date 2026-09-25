@@ -156,3 +156,58 @@ def validate_chunk_semantically(
     )
 
     return result.output
+
+
+def _sample_chunk_indices(
+    total: int,
+    sample_size: int,
+) -> list[int]:
+    """Sélectionne un échantillon déterministe réparti sur le corpus."""
+
+    if total <= 0 or sample_size <= 0:
+        return []
+
+    count = min(total, sample_size)
+
+    if count == 1:
+        return [0]
+
+    return [
+        round(
+            index * (total - 1) / (count - 1)
+        )
+        for index in range(count)
+    ]
+
+
+def audit_chunks_semantically(
+    chunks: list[dict],
+    sample_size: int = 5,
+) -> list[dict]:
+    """Audite un échantillon de chunks avec Pydantic AI."""
+
+    results = []
+
+    for chunk_index in _sample_chunk_indices(
+        len(chunks),
+        sample_size,
+    ):
+        chunk = chunks[chunk_index]
+
+        assessment = validate_chunk_semantically(
+            chunk["text"]
+        )
+
+        results.append(
+            {
+                "chunk_id": chunk["id"],
+                "source": (
+                    chunk.get("metadata", {})
+                    .get("source", "unknown")
+                ),
+                "assessment": assessment.model_dump(),
+            }
+        )
+
+    return results
+

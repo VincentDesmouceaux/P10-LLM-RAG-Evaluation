@@ -1,10 +1,4 @@
 import logging
-from sportsee.rag.schemas import (
-    EmbeddingBatch,
-    PreparedChunk,
-    RAGQuery,
-    RetrievalResult,
-)
 import os
 import pickle
 from typing import Any, Dict, List, Optional
@@ -16,12 +10,21 @@ from langchain_core.documents import Document
 from sentence_transformers import SentenceTransformer
 
 from sportsee.core.config import (
-    EMBEDDING_MODEL,
-    EMBEDDING_BATCH_SIZE,
-    FAISS_INDEX_FILE,
-    DOCUMENT_CHUNKS_FILE,
-    CHUNK_SIZE,
     CHUNK_OVERLAP,
+    CHUNK_SIZE,
+    DOCUMENT_CHUNKS_FILE,
+    EMBEDDING_BATCH_SIZE,
+    EMBEDDING_MODEL,
+    FAISS_INDEX_FILE,
+)
+from sportsee.rag.chunk_quality_validator import (
+    audit_chunks_semantically,
+)
+from sportsee.rag.schemas import (
+    EmbeddingBatch,
+    PreparedChunk,
+    RAGQuery,
+    RetrievalResult,
 )
 
 
@@ -32,7 +35,18 @@ logging.basicConfig(
 
 
 class VectorStoreManager:
-    """Gère la création, le chargement et la recherche dans un index FAISS."""
+    """
+    Gère le cycle de vie du vector store FAISS.
+
+    Responsabilités :
+    - charger un index existant ;
+    - découper les documents en chunks ;
+    - valider structurellement les chunks avec Pydantic ;
+    - auditer optionnellement les chunks avec Pydantic AI ;
+    - générer et valider les embeddings ;
+    - construire et sauvegarder l'index FAISS ;
+    - effectuer les recherches sémantiques.
+    """
 
     def __init__(self):
         self.index: Optional[faiss.Index] = None
@@ -67,6 +81,7 @@ class VectorStoreManager:
                 "Chargement de l'index FAISS depuis %s...",
                 FAISS_INDEX_FILE,
             )
+
             self.index = faiss.read_index(
                 FAISS_INDEX_FILE
             )
@@ -75,15 +90,22 @@ class VectorStoreManager:
                 "Chargement des chunks depuis %s...",
                 DOCUMENT_CHUNKS_FILE,
             )
-            with open(DOCUMENT_CHUNKS_FILE, "rb") as file:
+
+            with open(
+                DOCUMENT_CHUNKS_FILE,
+                "rb",
+            ) as file:
                 self.document_chunks = pickle.load(file)
 
             expected_dimension = (
                 self.embedding_model
-                .get_embedding_dimension()
+                .get_sentence_embedding_dimension()
             )
 
-            if self.index.d != expected_dimension:
+            if (
+                expected_dimension is None
+                or self.index.d != int(expected_dimension)
+            ):
                 logging.warning(
                     "Index FAISS incompatible avec le modèle "
                     "d'embedding actuel : index=%s dimensions, "
@@ -91,6 +113,7 @@ class VectorStoreManager:
                     self.index.d,
                     expected_dimension,
                 )
+
                 logging.warning(
                     "L'index doit être reconstruit avec "
                     "'python indexer.py'."
@@ -111,6 +134,7 @@ class VectorStoreManager:
                 "Erreur lors du chargement de l'index/chunks : %s",
                 error,
             )
+
             self.index = None
             self.document_chunks = []
 
@@ -118,7 +142,12 @@ class VectorStoreManager:
         self,
         documents: List[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
-        """Découpe les documents en chunks avec métadonnées."""
+        """
+        Découpe les documents en chunks.
+
+        Chaque chunk est validé structurellement
+        avec le modèle Pydantic PreparedChunk.
+        """
 
         logging.info(
             "Découpage de %s documents en chunks "
@@ -175,17 +204,90 @@ class VectorStoreManager:
                 )
 
         logging.info(
-            "Total de %s chunks créés.",
+            "Total de %s chunks créés et validés "
+            "structurellement avec Pydantic.",
             len(all_chunks),
         )
 
         return all_chunks
 
+    def _run_semantic_audit(
+        self,
+        chunks: List[Dict[str, Any]],
+        sample_size: int,
+    ) -> List[Dict[str, Any]]:
+        """
+        Exécute un audit sémantique Pydantic AI.
+
+        L'audit est volontairement effectué sur un échantillon
+        afin de limiter la latence et le nombre d'appels au LLM.
+
+        Cet audit évalue la qualité des chunks mais ne les filtre
+        pas automatiquement de l'index.
+        """
+
+        if sample_size <= 0:
+            raise ValueError(
+                "semantic_audit_sample_size doit être "
+                "strictement supérieur à 0."
+            )
+
+        effective_sample_size = min(
+            sample_size,
+            len(chunks),
+        )
+
+        logging.info(
+            "Audit sémantique Pydantic AI activé "
+            "sur %s/%s chunks.",
+            effective_sample_size,
+            len(chunks),
+        )
+
+        audit_results = audit_chunks_semantically(
+            chunks,
+            sample_size=effective_sample_size,
+        )
+
+        valid_count = 0
+
+        for audit_result in audit_results:
+            assessment = audit_result["assessment"]
+
+            if assessment["is_valid"]:
+                valid_count += 1
+
+            logging.info(
+                "Audit chunk=%s | source=%s | "
+                "valid=%s | relevance=%.2f | "
+                "readability=%.2f | reason=%s",
+                audit_result["chunk_id"],
+                audit_result["source"],
+                assessment["is_valid"],
+                assessment["relevance_score"],
+                assessment["readability_score"],
+                assessment["reason"],
+            )
+
+        logging.info(
+            "Audit sémantique terminé : "
+            "%s/%s chunks audités considérés valides.",
+            valid_count,
+            len(audit_results),
+        )
+
+        return audit_results
+
     def _generate_embeddings(
         self,
         chunks: List[Dict[str, Any]],
     ) -> Optional[np.ndarray]:
-        """Génère localement les embeddings des chunks."""
+        """
+        Génère localement les embeddings.
+
+        Le batch obtenu est validé avec Pydantic
+        avant sa transmission à FAISS.
+        """
 
         if not chunks:
             logging.warning(
@@ -225,6 +327,12 @@ class VectorStoreManager:
                 .get_sentence_embedding_dimension()
             )
 
+            if expected_dimension is None:
+                raise ValueError(
+                    "Impossible de déterminer la dimension "
+                    "des embeddings du modèle."
+                )
+
             validated_batch = EmbeddingBatch(
                 chunk_ids=[
                     chunk["id"]
@@ -259,8 +367,20 @@ class VectorStoreManager:
     def build_index(
         self,
         documents: List[Dict[str, Any]],
+        semantic_audit: bool = False,
+        semantic_audit_sample_size: int = 5,
     ):
-        """Construit un index FAISS à partir des documents."""
+        """
+        Construit l'index FAISS à partir des documents.
+
+        Pipeline :
+        1. chunking ;
+        2. validation structurelle Pydantic ;
+        3. audit sémantique Pydantic AI optionnel ;
+        4. génération et validation des embeddings ;
+        5. construction de l'index FAISS ;
+        6. sauvegarde.
+        """
 
         if not documents:
             logging.warning(
@@ -269,7 +389,7 @@ class VectorStoreManager:
             )
             return
 
-        # 1. Chunking
+        # 1. Chunking + validation Pydantic
         self.document_chunks = (
             self._split_documents_to_chunks(
                 documents
@@ -282,7 +402,14 @@ class VectorStoreManager:
             )
             return
 
-        # 2. Embeddings locaux
+        # 2. Audit sémantique optionnel Pydantic AI
+        if semantic_audit:
+            self._run_semantic_audit(
+                self.document_chunks,
+                sample_size=semantic_audit_sample_size,
+            )
+
+        # 3. Embeddings locaux + validation Pydantic
         embeddings = self._generate_embeddings(
             self.document_chunks
         )
@@ -301,7 +428,7 @@ class VectorStoreManager:
             self.index = None
             return
 
-        # 3. Index FAISS / similarité cosinus
+        # 4. Index FAISS / similarité cosinus
         dimension = embeddings.shape[1]
 
         logging.info(
@@ -310,9 +437,8 @@ class VectorStoreManager:
             dimension,
         )
 
-        # Les embeddings sont déjà normalisés par
-        # SentenceTransformer.
-        # IndexFlatIP équivaut alors à une similarité cosinus.
+        # Les embeddings sont normalisés par SentenceTransformer.
+        # IndexFlatIP correspond alors à une similarité cosinus.
         self.index = faiss.IndexFlatIP(
             dimension
         )
@@ -326,7 +452,7 @@ class VectorStoreManager:
             self.index.ntotal,
         )
 
-        # 4. Sauvegarde
+        # 5. Sauvegarde
         self._save_index_and_chunks()
 
     def _save_index_and_chunks(self):
@@ -412,7 +538,6 @@ class VectorStoreManager:
 
         query_text = validated_query.question
 
-
         if (
             self.index is None
             or not self.document_chunks
@@ -431,7 +556,6 @@ class VectorStoreManager:
         )
 
         try:
-            # Embedding LOCAL de la question
             query_embedding = (
                 self.embedding_model.encode(
                     [query_text],

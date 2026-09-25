@@ -1,75 +1,220 @@
-# indexer.py
 import argparse
 import logging
 from typing import Optional
 
-from sportsee.core.config import INPUT_DIR # INPUT_DATA_URL (décommentez si besoin)
-from sportsee.rag.data_loader import download_and_extract_zip, load_and_parse_files
+from sportsee.core.config import INPUT_DIR
+from sportsee.rag.data_loader import (
+    download_and_extract_zip,
+    load_and_parse_files,
+)
 from sportsee.rag.vector_store import VectorStoreManager
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def run_indexing(input_directory: str, data_url: Optional[str] = None):
-    """Exécute le processus complet d'indexation."""
-    logging.info("--- Démarrage du processus d'indexation ---")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
 
-    # --- Étape 1: Téléchargement et Extraction (Optionnel) ---
-    if data_url:
-        logging.info(f"Tentative de téléchargement depuis l'URL: {data_url}")
-        success = download_and_extract_zip(data_url, input_directory)
-        if not success:
-            logging.error("Échec du téléchargement ou de l'extraction. Arrêt.")
-            # Décider si on continue avec le contenu local existant ou si on arrête.
-            # Ici, on arrête pour éviter d'indexer des données potentiellement incomplètes/anciennes.
-            return
-    else:
-        logging.info(f"Aucune URL fournie. Utilisation des fichiers locaux dans: {input_directory}")
 
-    # --- Étape 2: Chargement et Parsing des Fichiers ---
-    logging.info(f"Chargement et parsing des fichiers depuis: {input_directory}")
-    documents = load_and_parse_files(input_directory)
+def run_indexing(
+    input_directory: str,
+    data_url: Optional[str] = None,
+    semantic_audit: bool = False,
+    semantic_audit_sample_size: int = 5,
+) -> None:
+    """
+    Exécute le pipeline complet d'indexation RAG.
 
-    if not documents:
-        logging.warning("Aucun document n'a été chargé ou parsé. Vérifiez le contenu du dossier d'entrée.")
-        logging.info("--- Processus d'indexation terminé (aucun document traité) ---")
+    Étapes :
+    1. téléchargement/extraction optionnels ;
+    2. chargement et parsing des sources ;
+    3. chunking et validation Pydantic ;
+    4. audit sémantique Pydantic AI optionnel ;
+    5. génération et validation des embeddings ;
+    6. construction et sauvegarde de l'index FAISS.
+    """
+
+    logging.info(
+        "--- Démarrage du processus d'indexation ---"
+    )
+
+    if (
+        semantic_audit
+        and semantic_audit_sample_size <= 0
+    ):
+        logging.error(
+            "La taille de l'échantillon d'audit "
+            "doit être strictement supérieure à 0."
+        )
         return
 
-    # --- Étape 3: Création/Mise à jour de l'index Vectoriel ---
-    logging.info("Initialisation du gestionnaire de Vector Store...")
-    vector_store = VectorStoreManager() # Le constructeur ne fait que charger s'il existe
+    # 1. Téléchargement / extraction optionnels
+    if data_url:
+        logging.info(
+            "Téléchargement des données depuis : %s",
+            data_url,
+        )
 
-    logging.info("Construction de l'index Faiss (cela peut prendre du temps)...")
-    # Cette méthode va splitter, générer les embeddings, créer l'index et sauvegarder
-    vector_store.build_index(documents)
+        success = download_and_extract_zip(
+            data_url,
+            input_directory,
+        )
 
-    logging.info("--- Processus d'indexation terminé avec succès ---")
-    logging.info(f"Nombre de documents traités: {len(documents)}")
-    if vector_store.index:
-        logging.info(f"Nombre de chunks indexés: {vector_store.index.ntotal}")
+        if not success:
+            logging.error(
+                "Échec du téléchargement ou "
+                "de l'extraction. Arrêt."
+            )
+            return
+
     else:
-        logging.warning("L'index final n'a pas pu être créé ou est vide.")
+        logging.info(
+            "Utilisation des fichiers locaux : %s",
+            input_directory,
+        )
+
+    # 2. Chargement et parsing
+    logging.info(
+        "Chargement et parsing des fichiers..."
+    )
+
+    documents = load_and_parse_files(
+        input_directory
+    )
+
+    if not documents:
+        logging.warning(
+            "Aucun document n'a été chargé. "
+            "Vérifiez le dossier d'entrée."
+        )
+        return
+
+    logging.info(
+        "%s documents chargés.",
+        len(documents),
+    )
+
+    # 3. Initialisation du vector store
+    logging.info(
+        "Initialisation du VectorStoreManager..."
+    )
+
+    vector_store = VectorStoreManager()
+
+    # 4. Configuration éventuelle de l'audit Pydantic AI
+    if semantic_audit:
+        logging.info(
+            "Audit sémantique Pydantic AI activé "
+            "(échantillon=%s).",
+            semantic_audit_sample_size,
+        )
+    else:
+        logging.info(
+            "Audit sémantique Pydantic AI désactivé."
+        )
+
+    # 5. Construction du pipeline RAG / FAISS
+    logging.info(
+        "Construction de l'index FAISS..."
+    )
+
+    vector_store.build_index(
+        documents,
+        semantic_audit=semantic_audit,
+        semantic_audit_sample_size=(
+            semantic_audit_sample_size
+        ),
+    )
+
+    # 6. Résultat
+    if vector_store.index is None:
+        logging.error(
+            "L'index FAISS n'a pas pu être construit."
+        )
+        return
+
+    logging.info(
+        "--- Indexation terminée avec succès ---"
+    )
+
+    logging.info(
+        "Documents traités : %s",
+        len(documents),
+    )
+
+    logging.info(
+        "Chunks indexés : %s",
+        vector_store.index.ntotal,
+    )
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Script d'indexation pour l'application RAG")
+def build_parser() -> argparse.ArgumentParser:
+    """Construit l'interface CLI du pipeline d'indexation."""
+
+    parser = argparse.ArgumentParser(
+        description=(
+            "Pipeline d'indexation RAG SportSee "
+            "avec Pydantic, Pydantic AI et FAISS."
+        )
+    )
+
     parser.add_argument(
         "--input-dir",
         type=str,
         default=INPUT_DIR,
-        help=f"Répertoire contenant les fichiers sources (par défaut: {INPUT_DIR})"
+        help=(
+            "Répertoire contenant les données sources "
+            f"(défaut : {INPUT_DIR})."
+        ),
     )
+
     parser.add_argument(
         "--data-url",
         type=str,
-        # default=INPUT_DATA_URL, # Décommentez pour utiliser la valeur du .env par défaut
         default=None,
-        help="URL optionnelle pour télécharger et extraire un fichier inputs.zip"
+        help=(
+            "URL optionnelle d'une archive à télécharger "
+            "et extraire avant indexation."
+        ),
     )
+
+    parser.add_argument(
+        "--semantic-audit",
+        action="store_true",
+        help=(
+            "Active l'audit sémantique des chunks "
+            "avec Pydantic AI et Ollama."
+        ),
+    )
+
+    parser.add_argument(
+        "--semantic-audit-sample-size",
+        type=int,
+        default=5,
+        help=(
+            "Nombre de chunks audités par Pydantic AI "
+            "(défaut : 5)."
+        ),
+    )
+
+    return parser
+
+
+def main() -> None:
+    """Point d'entrée CLI."""
+
+    parser = build_parser()
     args = parser.parse_args()
 
-    # Vérifier si l'URL est passée en argument, sinon prendre celle du .env (si définie)
-    # final_data_url = args.data_url if args.data_url is not None else INPUT_DATA_URL
-    # Simplification: on utilise seulement l'argument --data-url pour l'instant
-    final_data_url = args.data_url
+    run_indexing(
+        input_directory=args.input_dir,
+        data_url=args.data_url,
+        semantic_audit=args.semantic_audit,
+        semantic_audit_sample_size=(
+            args.semantic_audit_sample_size
+        ),
+    )
 
-    run_indexing(input_directory=args.input_dir, data_url=final_data_url)
+
+if __name__ == "__main__":
+    main()
