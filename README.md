@@ -446,6 +446,35 @@ OK
 
 ---
 
+# Installation de PostgreSQL
+
+PostgreSQL doit être installé et démarré avant le chargement des données structurées.
+
+Sur macOS avec Homebrew :
+
+```bash
+brew install postgresql
+brew services start postgresql
+```
+
+La création de la base et le chargement des données sont détaillés dans la section `Chargement des données SQL`.
+
+---
+
+# Configuration Mistral
+
+La clé API Mistral est facultative et doit rester locale. Créer un fichier `.env` à la racine du projet :
+
+```text
+MISTRAL_API_KEY=votre_cle_api_mistral
+```
+
+Le fichier `.env` est ignoré par Git.
+
+Le modèle utilisé pour la génération Mistral est configuré dans `sportsee/core/config.py`. Si la clé est absente ou indisponible, le script `scripts/evaluate_ragas.py` peut poursuivre en mode retrieval-only.
+
+---
+
 # Données
 
 Les fichiers sources sont placés dans :
@@ -517,6 +546,16 @@ export DATABASE_URL="postgresql+psycopg:///p10_dsml"
 
 ---
 
+# Lancer l’application Streamlit
+
+Une fois Ollama, PostgreSQL, le vector store et les données SQL disponibles :
+
+```bash
+streamlit run app/streamlit_app.py
+```
+
+---
+
 # Lancer les tests
 
 ```bash
@@ -526,7 +565,7 @@ python -m pytest -q
 État observé lors de la dernière validation :
 
 ```text
-11 passed
+20 passed
 ```
 
 ---
