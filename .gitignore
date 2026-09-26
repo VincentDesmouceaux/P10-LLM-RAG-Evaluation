@@ -47,7 +47,6 @@ data/
 # Jupyter Notebook
 .ipynb_checkpoints
 evaluation_cache/
-vector_db_baseline_mistral/
 
 # Generated PlotTool images
 generated_plots/*.png

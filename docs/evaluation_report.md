@@ -65,7 +65,7 @@ Le pipeline est :
 1. détection de l'intention numérique ;
 2. transformation de la question en SQL ;
 3. validation de la requête ;
-4. exécution sur SQLite ;
+4. exécution sur PostgreSQL via le SQL Tool LangChain ;
 5. récupération des résultats ;
 6. synthèse de la réponse.
 
@@ -159,7 +159,7 @@ Cette étape permet ensuite au LLM de générer une réponse à partir du contex
 
 ## 5. Base de données relationnelle
 
-Les données statistiques issues du fichier Excel ont été intégrées dans une base SQLite.
+Les données statistiques issues du fichier Excel ont été intégrées dans une base PostgreSQL.
 
 Le schéma relationnel comporte les tables :
 
@@ -296,11 +296,46 @@ Les métriques utilisées sont :
 - **Faithfulness** ;
 - **Answer Relevancy**.
 
+#### Seuils d'interprétation
+
+Afin de faciliter l'analyse des résultats, des seuils internes au projet sont utilisés comme repères d'interprétation. Ils ne constituent pas des standards officiels de RAGAS.
+
+| Score | Interprétation |
+|---|---|
+| >= 0.80 | Résultat satisfaisant |
+| 0.60 à 0.79 | Résultat acceptable mais à surveiller |
+| < 0.60 | Axe d'amélioration prioritaire |
+
+Ces seuils permettent d'identifier rapidement les métriques nécessitant une analyse qualitative complémentaire. Ils doivent être interprétés avec prudence, notamment lorsque le benchmark contient peu de cas de test.
+
 Les cas de test sont répartis en plusieurs catégories :
 
 - simple ;
 - complexe ;
 - bruité.
+
+#### Tests de robustesse complémentaires
+
+Le benchmark RAGAS est complété par deux scénarios de robustesse qui ne sont volontairement pas intégrés aux moyennes RAGAS :
+
+| Catégorie | Objectif | Comportement attendu | Résultat |
+|---|---|---|---|
+| out_of_domain | Question hors du domaine NBA | Abstention explicite | PASS |
+| missing_context | Information absente du corpus | Signalement d'un contexte insuffisant | PASS |
+
+Les deux scénarios ont été validés, soit **2 tests réussis sur 2**.
+
+Ces contrôles sont évalués séparément afin de ne pas modifier les moyennes du benchmark RAGAS de référence.
+
+Le retriever FAISS retourne malgré tout cinq voisins pour chaque requête, y compris lorsqu'une question est hors domaine ou que l'information recherchée est absente. La robustesse repose donc ici sur la capacité du système de génération à reconnaître que les contextes récupérés ne permettent pas de produire une réponse fondée.
+
+Le contrôle PASS/FAIL utilise une détection déterministe de formulations d'abstention. Cette méthode constitue une heuristique de test reproductible et non une mesure sémantique parfaite.
+
+Les résultats détaillés sont enregistrés dans :
+
+evaluation_results/reddit_robustness.csv
+
+
 
 ### 9.2 Évaluation des réponses numériques
 
@@ -558,7 +593,7 @@ Les requêtes complexes peuvent produire :
 - des sous-requêtes incorrectes ;
 - des alias incohérents ;
 - des références à des colonnes inexistantes ;
-- des constructions SQL non compatibles avec SQLite.
+- des constructions SQL non compatibles avec le dialecte de la base relationnelle.
 
 ### Réparation automatique
 
@@ -750,14 +785,21 @@ Ils permettent notamment de visualiser :
 - les performances par catégorie ;
 - les métriques RAGAS avant et après amélioration.
 
-Les fichiers comprennent notamment :
+### Accuracy avant / après SQL Tool
 
-```text
-before_after_accuracy.png
-before_after_by_category.png
-ragas_before_after.png
-sql_before_after.png
-```
+![Accuracy avant et après SQL Tool](../evaluation_results/figures/before_after_accuracy.png)
+
+### Performances par catégorie
+
+![Performances avant et après par catégorie](../evaluation_results/figures/before_after_by_category.png)
+
+### Métriques RAGAS avant / après
+
+![Métriques RAGAS avant et après](../evaluation_results/figures/ragas_before_after.png)
+
+### Comparaison SQL avant / après
+
+![Résultats SQL avant et après](../evaluation_results/figures/sql_before_after.png)
 
 ---
 
@@ -865,3 +907,14 @@ Les principaux axes d'amélioration futurs sont :
 - comparer plusieurs modèles juges ;
 - améliorer la couverture des tests ;
 - intégrer éventuellement un outil de génération dynamique de graphiques.
+
+## Intégration de Mistral via LangChain
+
+Une intégration Mistral est disponible dans le pipeline d'évaluation via LangChain et ChatMistralAI.
+
+Cette intégration est utilisée pour la génération de réponses lorsque MISTRAL_API_KEY est disponible. Elle est distincte du pipeline d'embedding : les représentations vectorielles sont calculées localement avec SentenceTransformer MiniLM et stockées dans FAISS.
+
+En cas d'absence de clé API ou d'échec de l'appel Mistral, le script d'évaluation bascule en mode retrieval-only. Ce mécanisme permet de conserver l'évaluation du retrieval sans rendre l'ensemble du benchmark dépendant de la disponibilité d'un service externe.
+
+Le juge utilisé pour l'évaluation RAGAS de référence reste local via Ollama. Cette séparation améliore la reproductibilité du protocole expérimental.
+

@@ -360,7 +360,7 @@ Utilisé pour :
 
 ### Questions numériques
 
-**LangChain SQL Tool → SQLite → LLM**
+**LangChain SQL Tool → PostgreSQL → LLM**
 
 Utilisé pour :
 
@@ -562,6 +562,6 @@ st.divider()
 st.caption(
     "P10 OpenClassrooms — "
     "RAG + SQL Tool + Hybrid Routing + "
-    "FAISS + SQLite + Ollama + "
+    "FAISS + PostgreSQL + Ollama + "
     "Pydantic AI + RAGAS"
 )

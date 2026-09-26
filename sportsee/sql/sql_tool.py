@@ -1,13 +1,16 @@
 import json
 import re
-import sqlite3
-from pathlib import Path
+from langchain_community.tools.sql_database.tool import QuerySQLDatabaseTool
+from langchain_community.utilities import SQLDatabase
 
 from langchain_core.tools import tool
 from langchain_ollama import ChatOllama
+from sqlalchemy.exc import SQLAlchemyError
+
+from sportsee.core.config import DATABASE_URL
 
 
-DATABASE_PATH = Path("data/nba_rag.db")
+SQL_TABLES = ["players", "matches", "stats", "reports"]
 OLLAMA_MODEL = "qwen2.5:7b-instruct"
 
 
@@ -138,56 +141,33 @@ FORBIDDEN_SQL_KEYWORDS = {
 }
 
 
-def get_readonly_connection() -> sqlite3.Connection:
-    database_uri = (
-        f"file:{DATABASE_PATH.resolve()}?mode=ro"
+def get_sql_database() -> SQLDatabase:
+    return SQLDatabase.from_uri(
+        DATABASE_URL,
+        include_tables=SQL_TABLES,
     )
 
-    connection = sqlite3.connect(
-        database_uri,
-        uri=True,
+
+class StructuredQuerySQLDatabaseTool(QuerySQLDatabaseTool):
+    def _run(
+        self,
+        query: str,
+        run_manager=None,
+    ):
+        return self.db._execute(
+            query,
+            fetch="all",
+        )
+
+
+def get_sql_query_tool() -> QuerySQLDatabaseTool:
+    return StructuredQuerySQLDatabaseTool(
+        db=get_sql_database()
     )
-
-    connection.row_factory = sqlite3.Row
-
-    return connection
 
 
 def get_database_schema() -> str:
-    connection = get_readonly_connection()
-
-    try:
-        tables = [
-            "players",
-            "matches",
-            "stats",
-            "reports",
-        ]
-
-        schema_parts = []
-
-        for table in tables:
-            columns = connection.execute(
-                f"PRAGMA table_info({table})"
-            ).fetchall()
-
-            formatted_columns = [
-                f"{column['name']} {column['type']}"
-                for column in columns
-            ]
-
-            schema_parts.append(
-                f"{table}("
-                + ", ".join(
-                    formatted_columns
-                )
-                + ")"
-            )
-
-        return "\n".join(schema_parts)
-
-    finally:
-        connection.close()
+    return get_sql_database().get_table_info()
 
 
 def clean_generated_sql(
@@ -294,10 +274,10 @@ def generate_sql(
     )
 
     prompt = f"""
-Tu es un expert SQLite spécialisé dans les données NBA.
+Tu es un expert PostgreSQL spécialisé dans les données NBA.
 
 Ta mission est de convertir la question utilisateur
-en UNE requête SQL SQLite en lecture seule.
+en UNE requête SQL PostgreSQL en lecture seule.
 
 RÈGLES:
 - Retourne uniquement la requête SQL.
@@ -351,7 +331,7 @@ def repair_sql(
     )
 
     prompt = f"""
-Tu dois corriger une requête SQLite invalide.
+Tu dois corriger une requête PostgreSQL invalide.
 
 QUESTION UTILISATEUR:
 {question}
@@ -362,7 +342,7 @@ SCHÉMA:
 REQUÊTE INVALIDE:
 {invalid_sql}
 
-ERREUR SQLITE:
+ERREUR POSTGRESQL:
 {error}
 
 RÈGLES:
@@ -399,29 +379,30 @@ def execute_sql(
 ) -> dict:
     validate_readonly_sql(sql)
 
-    connection = get_readonly_connection()
+    query_tool = get_sql_query_tool()
+    rows = query_tool.invoke(sql)
 
-    try:
-        cursor = connection.execute(sql)
+    if not isinstance(rows, list):
+        raise RuntimeError(
+            "Le SQL Tool LangChain n a pas retourné "
+            "des lignes structurées."
+        )
 
-        rows = cursor.fetchmany(100)
+    rows = rows[:100]
 
-        columns = [
-            description[0]
-            for description
-            in cursor.description
-        ]
+    columns = (
+        list(rows[0].keys())
+        if rows
+        else []
+    )
 
-        return {
-            "columns": columns,
-            "rows": [
-                dict(row)
-                for row in rows
-            ],
-        }
-
-    finally:
-        connection.close()
+    return {
+        "columns": columns,
+        "rows": [
+            dict(row)
+            for row in rows
+        ],
+    }
 
 
 @tool
@@ -430,7 +411,7 @@ def nba_sql_tool(
 ) -> str:
     """
     Répond aux questions quantitatives sur les données NBA
-    stockées dans SQLite.
+    stockées dans PostgreSQL.
 
     Le tool convertit une question en SQL,
     vérifie que la requête est en lecture seule,
@@ -442,7 +423,7 @@ def nba_sql_tool(
     try:
         result = execute_sql(sql)
 
-    except sqlite3.OperationalError as error:
+    except SQLAlchemyError as error:
         sql = repair_sql(
             question=question,
             invalid_sql=sql,
