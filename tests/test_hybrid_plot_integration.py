@@ -58,7 +58,7 @@ def test_hybrid_agent_generates_plot_for_sql_request(
                 },
             ],
             "sources": [
-                "SQLite NBA",
+                "PostgreSQL NBA",
             ],
         },
     )

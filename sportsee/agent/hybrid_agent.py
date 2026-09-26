@@ -352,7 +352,7 @@ RÈGLES:
                 "sql": payload["sql"],
                 "data": payload["rows"],
                 "sources": [
-                    "SQLite NBA"
+                    "PostgreSQL NBA"
                 ],
             }
 

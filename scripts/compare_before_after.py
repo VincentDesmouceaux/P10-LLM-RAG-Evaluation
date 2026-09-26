@@ -94,7 +94,7 @@ TEST_CASES = [
         ],
         "expected_route": "hybrid",
         "expected_source_fragments": [
-            "SQLite NBA",
+            "PostgreSQL NBA",
             "Reddit",
         ],
     },
