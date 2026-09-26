@@ -32,6 +32,10 @@ SEARCH_K = 5                        # Nombre de documents à récupérer par dé
 
 # --- Configuration de la Base de Données PostgreSQL ---
 POSTGRES_DSN = os.getenv("POSTGRES_DSN", "dbname=p10_dsml")
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql+psycopg:///p10_dsml",
+)
 
 # --- Configuration de l'Application ---
 APP_TITLE = "NBA Analyst AI"

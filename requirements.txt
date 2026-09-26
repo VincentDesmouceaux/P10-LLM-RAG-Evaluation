@@ -28,3 +28,7 @@ numpy==2.4.6
 pydantic==2.13.5
 
 psycopg[binary]==3.3.6
+
+
+
+SQLAlchemy==2.0.54
