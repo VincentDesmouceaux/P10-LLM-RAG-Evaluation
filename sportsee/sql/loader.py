@@ -1,10 +1,11 @@
-import sqlite3
+import psycopg
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 from pydantic import ValidationError
 
+from sportsee.core.config import POSTGRES_DSN
 from sportsee.sql.schemas import (
     PlayerRecord,
     ReportRecord,
@@ -13,7 +14,6 @@ from sportsee.sql.schemas import (
 
 
 EXCEL_PATH = Path("inputs/regular NBA.xlsx")
-DATABASE_PATH = Path("data/nba_rag.db")
 SCHEMA_PATH = Path("db/schema.sql")
 
 
@@ -210,34 +210,36 @@ def load_reports_dataframe() -> pd.DataFrame:
 
 
 def create_database(
-    connection: sqlite3.Connection,
+    connection: psycopg.Connection,
 ) -> None:
-    connection.executescript(
-        SCHEMA_PATH.read_text(
-            encoding="utf-8"
-        )
+    schema_sql = SCHEMA_PATH.read_text(
+        encoding="utf-8"
     )
+
+    for statement in schema_sql.split(";"):
+        statement = statement.strip()
+        if statement:
+            connection.execute(statement)
 
 
 def reset_tables(
-    connection: sqlite3.Connection,
+    connection: psycopg.Connection,
 ) -> None:
     connection.execute(
-        "DELETE FROM stats"
-    )
-    connection.execute(
-        "DELETE FROM reports"
-    )
-    connection.execute(
-        "DELETE FROM matches"
-    )
-    connection.execute(
-        "DELETE FROM players"
+        """
+        TRUNCATE TABLE
+            stats,
+            reports,
+            matches,
+            players
+        RESTART IDENTITY
+        CASCADE
+        """
     )
 
 
 def insert_players_and_stats(
-    connection: sqlite3.Connection,
+    connection: psycopg.Connection,
     df: pd.DataFrame,
 ) -> tuple[int, int]:
     players_inserted = 0
@@ -292,7 +294,8 @@ def insert_players_and_stats(
                 team_code,
                 age
             )
-            VALUES (?, ?, ?)
+            VALUES (%s, %s, %s)
+            RETURNING player_id
             """,
             (
                 player.name,
@@ -301,7 +304,12 @@ def insert_players_and_stats(
             ),
         )
 
-        player_id = cursor.lastrowid
+        player_row = cursor.fetchone()
+
+        if player_row is None:
+            raise RuntimeError("Insertion joueur sans identifiant retourné")
+
+        player_id = int(player_row[0])
 
         stat_data = stats.model_dump()
 
@@ -320,7 +328,7 @@ def insert_players_and_stats(
         ]
 
         placeholders = ", ".join(
-            ["?"] * len(columns)
+            ["%s"] * len(columns)
         )
 
         connection.execute(
@@ -345,7 +353,7 @@ def insert_players_and_stats(
 
 
 def insert_reports(
-    connection: sqlite3.Connection,
+    connection: psycopg.Connection,
     df: pd.DataFrame,
 ) -> int:
     reports_inserted = 0
@@ -394,7 +402,7 @@ def insert_reports(
                 total_points,
                 source_sheet
             )
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s)
             """,
             (
                 report.team_code,
@@ -423,20 +431,11 @@ def main() -> None:
         f"Rapports détectés : {len(reports_df)}"
     )
 
-    DATABASE_PATH.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    connection = sqlite3.connect(
-        DATABASE_PATH
+    connection = psycopg.connect(
+        POSTGRES_DSN
     )
 
     try:
-        connection.execute(
-            "PRAGMA foreign_keys = ON"
-        )
-
         create_database(
             connection
         )
@@ -482,7 +481,7 @@ def main() -> None:
     )
 
     print()
-    print("Ingestion SQLite : OK")
+    print("Ingestion PostgreSQL : OK")
 
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@ Le système a ensuite été enrichi avec :
 - une validation sémantique avec Pydantic AI ;
 - une observabilité avec Logfire ;
 - une évaluation automatisée avec RAGAS ;
-- une base de données SQLite ;
+- une base de données PostgreSQL ;
 - un Tool SQL LangChain ;
 - un agent hybride capable de choisir entre RAG et SQL ;
 - des benchmarks avant / après ;
@@ -43,7 +43,7 @@ Les métriques RAGAS utilisées sont :
 
 ### 2. Ajouter une couche SQL
 
-Les données numériques provenant du fichier Excel sont chargées dans une base SQLite.
+Les données numériques provenant du fichier Excel sont chargées dans une base PostgreSQL.
 
 Un Tool SQL LangChain permet ensuite de transformer dynamiquement une question en langage naturel en requête SQL.
 
@@ -76,7 +76,7 @@ Le système final distingue :
                   Embeddings          NL -> SQL
                         |                  |
                         v                  v
-                     FAISS             SQLite
+                     FAISS             PostgreSQL
                         |                  |
                         v                  v
                   Top-k chunks       Résultats SQL
@@ -209,7 +209,7 @@ La configuration utilise `send_to_logfire=False` : les traces du routage, de l'e
 
 # Base de données
 
-Les données numériques du fichier Excel sont intégrées dans une base SQLite.
+Les données numériques du fichier Excel sont intégrées dans une base PostgreSQL.
 
 Le schéma relationnel contient :
 
@@ -226,11 +226,12 @@ Le schéma SQL est disponible dans :
 db/schema.sql
 ```
 
-La base utilisée localement est :
+La base relationnelle locale est PostgreSQL. Par défaut, le projet utilise la base `p10_dsml`.
 
-```text
-data/nba_rag.db
-```
+La configuration est centralisée dans `sportsee/core/config.py` :
+
+- `POSTGRES_DSN` est utilisé par `psycopg` pour le chargement ;
+- `DATABASE_URL` est utilisé par SQLAlchemy/LangChain pour les requêtes.
 
 Le pipeline d'ingestion est :
 
@@ -272,7 +273,7 @@ Génération SQL
 Validation read-only
         |
         v
-Exécution SQLite
+Exécution PostgreSQL
         |
         v
 Résultat
@@ -362,7 +363,9 @@ pydantic 2.x
 pydantic-ai
 FAISS
 SentenceTransformers
-SQLite
+PostgreSQL
+SQLAlchemy
+psycopg
 Pytest
 Matplotlib
 ```
@@ -443,6 +446,35 @@ OK
 
 ---
 
+# Installation de PostgreSQL
+
+PostgreSQL doit être installé et démarré avant le chargement des données structurées.
+
+Sur macOS avec Homebrew :
+
+```bash
+brew install postgresql
+brew services start postgresql
+```
+
+La création de la base et le chargement des données sont détaillés dans la section `Chargement des données SQL`.
+
+---
+
+# Configuration Mistral
+
+La clé API Mistral est facultative et doit rester locale. Créer un fichier `.env` à la racine du projet :
+
+```text
+MISTRAL_API_KEY=votre_cle_api_mistral
+```
+
+Le fichier `.env` est ignoré par Git.
+
+Le modèle utilisé pour la génération Mistral est configuré dans `sportsee/core/config.py`. Si la clé est absente ou indisponible, le script `scripts/evaluate_ragas.py` peut poursuivre en mode retrieval-only.
+
+---
+
 # Données
 
 Les fichiers sources sont placés dans :
@@ -489,16 +521,37 @@ document_chunks.pkl
 
 # Chargement des données SQL
 
-Pour reconstruire la base SQLite à partir du fichier Excel :
+Pour reconstruire la base PostgreSQL à partir du fichier Excel :
+
+Si nécessaire, créer la base une seule fois :
+
+```bash
+createdb p10_dsml
+```
+
+Puis charger les données :
 
 ```bash
 python -m sportsee.sql.loader
 ```
 
-La base est créée dans :
+Le loader applique le schéma `db/schema.sql` et charge les données dans PostgreSQL.
 
-```text
-data/nba_rag.db
+La configuration par défaut cible `p10_dsml`. Pour une configuration personnalisée :
+
+```bash
+export POSTGRES_DSN="dbname=p10_dsml"
+export DATABASE_URL="postgresql+psycopg:///p10_dsml"
+```
+
+---
+
+# Lancer l’application Streamlit
+
+Une fois Ollama, PostgreSQL, le vector store et les données SQL disponibles :
+
+```bash
+streamlit run app/streamlit_app.py
 ```
 
 ---
@@ -512,7 +565,7 @@ python -m pytest -q
 État observé lors de la dernière validation :
 
 ```text
-11 passed
+20 passed
 ```
 
 ---
@@ -727,8 +780,6 @@ P10_DSML/
 ├── app/
 │   ├── __init__.py
 │   └── streamlit_app.py
-├── data/
-│   └── nba_rag.db
 ├── db/
 │   └── schema.sql
 ├── docs/
@@ -845,7 +896,7 @@ afin de mesurer l'impact sur la qualité du texte extrait et sur les performance
 
 Une fonctionnalité optionnelle de visualisation dynamique a été implémentée avec LangChain et Matplotlib.
 
-Le fichier `plot_tool.py` génère automatiquement des graphiques à partir des données structurées retournées par SQLite.
+Le fichier `plot_tool.py` génère automatiquement des graphiques à partir des données structurées retournées par PostgreSQL.
 
 ### Pipeline
 
@@ -858,7 +909,7 @@ Détection de l'intention graphique
         ↓
 SQL Tool
         ↓
-SQLite
+PostgreSQL
         ↓
 Données structurées
         ↓
@@ -883,7 +934,7 @@ Les valeurs représentées proviennent des résultats SQL. Le LLM ne fabrique pa
 
 `Montre-moi les 5 joueurs ayant marqué le plus de points sous forme de graphique.`
 
-Le système détecte l'intention numérique et graphique, interroge SQLite, transmet les lignes retournées à `PlotTool`, génère un PNG puis l'affiche automatiquement dans Streamlit.
+Le système détecte l'intention numérique et graphique, interroge PostgreSQL, transmet les lignes retournées à `PlotTool`, génère un PNG puis l'affiche automatiquement dans Streamlit.
 
 La génération est observable dans les traces Logfire avec le span `plot_generation`.
 

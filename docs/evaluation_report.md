@@ -65,7 +65,7 @@ Le pipeline est :
 1. détection de l'intention numérique ;
 2. transformation de la question en SQL ;
 3. validation de la requête ;
-4. exécution sur SQLite ;
+4. exécution sur PostgreSQL via le SQL Tool LangChain ;
 5. récupération des résultats ;
 6. synthèse de la réponse.
 
@@ -159,7 +159,7 @@ Cette étape permet ensuite au LLM de générer une réponse à partir du contex
 
 ## 5. Base de données relationnelle
 
-Les données statistiques issues du fichier Excel ont été intégrées dans une base SQLite.
+Les données statistiques issues du fichier Excel ont été intégrées dans une base PostgreSQL.
 
 Le schéma relationnel comporte les tables :
 
@@ -593,7 +593,7 @@ Les requêtes complexes peuvent produire :
 - des sous-requêtes incorrectes ;
 - des alias incohérents ;
 - des références à des colonnes inexistantes ;
-- des constructions SQL non compatibles avec SQLite.
+- des constructions SQL non compatibles avec le dialecte de la base relationnelle.
 
 ### Réparation automatique
 
@@ -785,14 +785,21 @@ Ils permettent notamment de visualiser :
 - les performances par catégorie ;
 - les métriques RAGAS avant et après amélioration.
 
-Les fichiers comprennent notamment :
+### Accuracy avant / après SQL Tool
 
-```text
-before_after_accuracy.png
-before_after_by_category.png
-ragas_before_after.png
-sql_before_after.png
-```
+![Accuracy avant et après SQL Tool](../evaluation_results/figures/before_after_accuracy.png)
+
+### Performances par catégorie
+
+![Performances avant et après par catégorie](../evaluation_results/figures/before_after_by_category.png)
+
+### Métriques RAGAS avant / après
+
+![Métriques RAGAS avant et après](../evaluation_results/figures/ragas_before_after.png)
+
+### Comparaison SQL avant / après
+
+![Résultats SQL avant et après](../evaluation_results/figures/sql_before_after.png)
 
 ---
 
