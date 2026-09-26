@@ -785,14 +785,21 @@ Ils permettent notamment de visualiser :
 - les performances par catégorie ;
 - les métriques RAGAS avant et après amélioration.
 
-Les fichiers comprennent notamment :
+### Accuracy avant / après SQL Tool
 
-```text
-before_after_accuracy.png
-before_after_by_category.png
-ragas_before_after.png
-sql_before_after.png
-```
+![Accuracy avant et après SQL Tool](../evaluation_results/figures/before_after_accuracy.png)
+
+### Performances par catégorie
+
+![Performances avant et après par catégorie](../evaluation_results/figures/before_after_by_category.png)
+
+### Métriques RAGAS avant / après
+
+![Métriques RAGAS avant et après](../evaluation_results/figures/ragas_before_after.png)
+
+### Comparaison SQL avant / après
+
+![Résultats SQL avant et après](../evaluation_results/figures/sql_before_after.png)
 
 ---
 
