@@ -73,24 +73,27 @@ Le système final distingue :
                   +-------------+    +-------------+
                         |                  |
                         v                  v
-                  Embeddings       LLM : NL -> SQL
+                  Embeddings         LLM : NL -> SQL
                         |                  |
                         v                  v
-                     FAISS        Validation read-only
+                     FAISS          Validation read-only
                         |                  |
                         v                  v
                   Top-k chunks    QuerySQLDatabaseTool
                         |                  |
                         v                  v
                      Contexte         SQLDatabase
-                                           |
-                                           v
-                                  PostgreSQL p10_dsml
-                                           |
-                                           v
-                                      Résultats SQL
+                        |                  |
+                        |                  v
+                        |          PostgreSQL p10_dsml
+                        |                  |
+                        |                  v
+                        |             Résultats SQL
                         |                  |
                         +--------+---------+
+                                 |
+                                 v
+                        Synthèse / fusion LLM
                                  |
                                  v
                          Réponse structurée
