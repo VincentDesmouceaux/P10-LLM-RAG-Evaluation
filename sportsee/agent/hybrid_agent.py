@@ -834,9 +834,17 @@ RÈGLES:
                         ),
                     )
 
-                    return self._answer_from_sql(
-                        question
+                result = self._answer_from_sql(
+                    question
+                )
+
+                if plot_intent:
+                    result = self._attach_plot(
+                        question,
+                        result,
                     )
+
+                return result
 
             logfire.info(
                 "routing_decision",
